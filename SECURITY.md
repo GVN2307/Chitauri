@@ -1,67 +1,94 @@
-# Chitauri Project - Security, Privacy & Isolation Policy (Pure Rust)
+# Chitauri Project - Security, Privacy & Storage Isolation Policy
 
-## 1. Threat Model & Security Posture
-
-The **Chitauri Mobile Audio Suite** is built entirely in **Pure Rust**, leveraging Rust's compile-time memory safety, thread safety, and strong typing. The application operates without remote proxy servers, third-party analytics, or external telemetry.
+This document defines the security architecture, threat model, and storage isolation policies enforced across all **Chitauri Audio Suite** applications.
 
 ---
 
-## 2. Storage Isolation & Anti-Leakage Protocol
+## 1. Threat Model & Security Posture
 
-### 2.1 The Problem
-Android and mobile operating systems run automated media crawler daemons (e.g., `MediaScanner` writing to `MediaStore`). Any audio file saved in conventional shared folders is scanned and added to the global media database, making the tracks immediately visible to third-party music apps (Spotify, VLC, Apple Music, Samsung Music).
+Chitauri operates as an entirely client-side application. The core threat model protects user privacy against three primary vectors:
+1. **Third-Party Media Indexer Harvesting:** Preventing device media crawlers from indexing and displaying private audio downloads in third-party music apps or cloud sync services.
+2. **Intermediate Network Eavesdropping & Data Collection:** Eliminating intermediate backend proxy servers and telemetry collectors.
+3. **Local Filesystem Vulnerabilities:** Preventing path traversal (`../`) and illegal character injection attacks during audio file serialization.
 
-### 2.2 The Solution in Rust
-1. **Dedicated Application Folder:** Audio files are stored strictly inside a dedicated folder (e.g. `ChitauriMusic/` in the user's Music or App Data directory).
-2. **Atomic `.nomedia` Sentinel File:**
-   ```rust
-   pub fn ensure_nomedia_sentinel(dir: &std::path::Path) -> std::io::Result<()> {
-       let nomedia_path = dir.join(".nomedia");
-       if !nomedia_path.exists() {
-           std::fs::File::create(nomedia_path)?;
-       }
-       Ok(())
-   }
-   ```
-3. **Isolation Guarantees:**
-   * **Hidden from Third-Party Media Players:** Any folder containing a `.nomedia` file is skipped by `MediaScanner`. No tracks will be indexed in global media databases.
-   * **Accessible via File Manager:** File managers directly traverse the filesystem hierarchy, allowing users to browse, copy, and open tracks at will.
+---
+
+## 2. Storage Isolation & Anti-Leakage Protocol (`.nomedia`)
+
+### 2.1 The Vulnerability
+Modern operating systems (Android and Windows) run automated background crawler daemons:
+- On Android, `MediaScanner` writes directory contents into the system-wide `MediaStore` content provider.
+- On Windows, indexing services and media players (Windows Media Player, Groove, Google Drive Sync) monitor user library folders.
+
+When audio files are written to standard shared storage directories, they are indexed globally, exposing tracks to third-party players (Spotify, VLC, Apple Music, Samsung Music) and triggering unwanted cloud uploads.
+
+### 2.2 The Solution: The `.nomedia` Protocol
+Chitauri enforces storage isolation by creating an atomic sentinel file named `.nomedia` in the dedicated audio vault directory:
+- **Android Directory:** `/storage/emulated/0/Music/ChitauriMusic/`
+- **Windows Directory:** `%USERPROFILE%\Music\ChitauriMusic\`
+
+#### Enforcement Implementation
+
+```
+ChitauriMusic/
+├── .nomedia              <-- Suppresses MediaScanner and Windows Indexers
+├── tracks_catalog.json   <-- Internal metadata registry
+└── *.mp3 / *.m4a         <-- Audio files
+```
+
+- **In Python (Windows Desktop Suite):**
+  ```python
+  nomedia_path = MUSIC_DIR / ".nomedia"
+  if not nomedia_path.exists():
+      nomedia_path.touch(exist_ok=True)
+  ```
+- **In Kotlin / Dart (Android Mobile Client):**
+  ```dart
+  final nomedia = File('${chitauriDir.path}/.nomedia');
+  if (!await nomedia.exists()) {
+    await nomedia.create(recursive: true);
+  }
+  ```
+- **In Rust (Reference Core):**
+  ```rust
+  pub fn ensure_nomedia_sentinel(dir: &std::path::Path) -> std::io::Result<()> {
+      let nomedia_path = dir.join(".nomedia");
+      if !nomedia_path.exists() {
+          std::fs::File::create(nomedia_path)?;
+      }
+      Ok(())
+  }
+  ```
+
+### 2.3 Isolation vs. Accessibility Guarantees
+- **Suppressed from Third-Party Players:** Media crawlers detect the `.nomedia` sentinel and completely bypass the directory during indexing sweeps.
+- **Unrestricted File Manager Access:** Unlike proprietary DRM sandboxes, native and third-party file managers (Windows File Explorer, Android Files) navigate the raw filesystem directly. Users retain full ownership to copy, move, or back up their tracks.
 
 ---
 
 ## 3. Path Sanitization & Defense-in-Depth
 
 ### 3.1 Filename Sanitization
-Titles fetched from YouTube may contain characters illegal on local filesystems (`:`, `\`, `/`, `?`, `*`) or directory traversal attacks (`../`). All filenames must pass through strict regex filtering:
-```rust
-pub fn sanitize_filename(name: &str) -> String {
-    let sanitized: String = name
-        .chars()
-        .map(|c| match c {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\0' => '_',
-            _ => c,
-        })
-        .collect();
+Track titles extracted from YouTube InnerTube feeds may contain filesystem-reserved characters or path traversal attacks (`../`). All filenames undergo strict sanitization before write operations:
+- Filtered characters: `< > : " / \ | ? * \0`
+- Traversal prevention: Explicit replacement of `..` sequences.
+- Length truncation: Maximum length capped at 120 characters to prevent buffer issues on older filesystems.
 
-    // Prevent directory traversal and cap length
-    sanitized.replace("..", "_").trim().chars().take(120).collect()
-}
-```
-
-### 3.2 Canonical Path Checks
-Before any write operation, canonicalize the path with `std::fs::canonicalize` and assert that the target file is strictly a child of the trusted app storage root.
+### 3.2 Canonical Path Verification
+Prior to any file deletion or disk modification, the application resolves the absolute path and asserts that the target file is strictly a descendant of the trusted `ChitauriMusic/` directory.
 
 ---
 
 ## 4. Privacy & Zero-Backend Invariants
 
-1. **Direct InnerTube Queries:** All search and stream resolution queries are dispatched directly from the client to YouTube endpoints via `reqwest`. Zero intermediate proxy or recording servers are utilized.
-2. **No Tracking or Telemetry:** No analytical or crash-reporting dependencies are permitted in `Cargo.toml`.
-3. **Anonymous Client Identity:** Requests spoof generic anonymous client contexts (`ANDROID` / `WEB`). No Google authentication, cookies, or user tokens are requested or stored.
+1. **Direct Endpoint Execution:** All search, stream resolution, and audio downloads communicate directly with YouTube CDN endpoints (`googlevideo.com`). No intermediary proxy, scraper, or relay server is used.
+2. **Zero Telemetry & Analytics:** No analytics SDKs, error-tracking services, or telemetry collectors are included in any codebase (Flutter, Python, or Rust).
+3. **Anonymous Client Identity:** InnerTube queries emulate standard anonymous client profiles (`ANDROID_MUSIC` or `WEB`). No Google accounts, user credentials, cookies, or session tokens are collected or stored.
 
 ---
 
-## 5. Memory & Thread Safety
+## 5. Concurrency & Memory Safety
 
-1. **Strictly Safe Rust:** `#![deny(unsafe_code)]` is enforced at the root crate level.
-2. **Channel-Based Concurrency:** Communication between the async Tokio worker threads and the GUI rendering loop is strictly mediated via thread-safe message channels (`std::sync::mpsc` / `tokio::sync::mpsc`).
+1. **Windows Desktop Suite:** Background downloads run inside dedicated daemon worker threads with explicit thread locks (`DOWNLOAD_LOCK`), preventing race conditions during catalog synchronization.
+2. **Android Mobile Client:** Heavy downloading executes in a dedicated Android Foreground Service holding a CPU `PARTIAL_WAKE_LOCK`, ensuring OS task killers do not interrupt background byte streaming.
+3. **Rust Core:** Compile-time memory safety with `#![deny(unsafe_code)]` and thread communication mediated via `tokio::sync::mpsc` channels.

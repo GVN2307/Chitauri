@@ -18,9 +18,12 @@ Chitauri is an entirely client-side, privacy-focused audio suite engineered for 
 
 The system features storage isolation via the `.nomedia` protocol, preventing operating system media crawlers from indexing downloaded tracks, while keeping files organized and directly manageable through device file managers.
 
-The suite provides two production deployment targets:
+The suite provides three operational components:
 1. **Windows Desktop Suite (`chitauri.exe`)**: A widescreen 1260x820 desktop application featuring a left navigation sidebar, responsive YouTube exploration grid, rich tabular offline vault with metadata inspection, dedicated download queue, real-time Web Audio API spectrum visualizer, and an interactive vinyl turntable studio.
 2. **Android Mobile Client (`com.chitauri.audio`)**: A high-performance mobile application backed by Kotlin foreground services, hardware-accelerated audio metadata extraction, and native stream resolution.
+3. **Native Rust Core Engine (`src/`)**: A pure Rust reference implementation demonstrating headless low-latency audio decoding (`rodio`, `symphonia`), deterministic dual-queue state machine math, and unit-tested storage isolation.
+
+> Detailed engineering documentation and layer breakdowns are codified in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -298,6 +301,7 @@ Chitauri/
 |   +-- config.toml                     # Cargo build flags and linker options
 |-- .gitignore                          # Build artifact and secret exclusions
 |-- AGENTS.md                           # Multi-agent architectural governance
+|-- ARCHITECTURE.md                     # Comprehensive system architecture specification
 |-- Cargo.lock                          # Locked dependency tree for Rust
 |-- Cargo.toml                          # Pure Rust workspace configuration
 |-- INSTRUCTIONS.md                     # Engineering directives and coding standards
@@ -306,12 +310,17 @@ Chitauri/
 |-- SECURITY.md                         # Security posture and storage isolation policy
 |-- SKILLS.md                           # Technical skills matrix and verification
 |-- assets/
-|   +-- logo.png                        # Application branding logo
+|   |-- logo.png                        # Application branding logo
+|   +-- logo.ico                        # Multi-resolution application icon
 |-- build_apk.ps1                       # Android APK compilation automation script
-|-- chitauri.exe                        # Standalone Windows desktop application (19.6 MB)
+|-- chitauri.exe                        # Standalone Windows desktop application (19.7 MB)
+|-- install.bat                         # Windows one-click desktop & start menu installer
+|-- install.ps1                         # PowerShell desktop & start menu installer
 |-- desktop_app/                        # Windows Desktop Application source
 |   |-- app.py                          # Desktop controller & extraction bridge
-|   +-- index.html                      # Widescreen desktop UI & vinyl turntable studio
+|   |-- index.html                      # Widescreen desktop UI & vinyl turntable studio
+|   |-- logo.png                        # Bundled branding logo asset
+|   +-- logo.ico                        # Multi-resolution application icon
 |-- chitauri_flutter/                   # Android Mobile Application codebase
 |   |-- android/
 |   |   |-- app/
