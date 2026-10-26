@@ -27,6 +27,11 @@ dist/
 *.aab
 *.zip
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
 # Temp / test captures
 screen*.png
 *screen*.png
