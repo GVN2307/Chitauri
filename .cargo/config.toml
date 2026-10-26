@@ -1,0 +1,13 @@
+[target.aarch64-linux-android]
+rustflags = [
+    "-C", "link-arg=-Wl,-z,max-page-size=16384",
+    "-C", "link-arg=-lc++_static",
+    "-C", "link-arg=-lc++abi",
+]
+
+[target.x86_64-linux-android]
+rustflags = [
+    "-C", "link-arg=-Wl,-z,max-page-size=16384",
+    "-C", "link-arg=-lc++_static",
+    "-C", "link-arg=-lc++abi",
+]

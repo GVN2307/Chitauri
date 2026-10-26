@@ -1,0 +1,9 @@
+-keep class com.yausername.** { *; }
+-keep interface com.yausername.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-keep interface com.fasterxml.jackson.** { *; }
+-keep class io.github.junkfood02.** { *; }
+-keepattributes *Annotation*,EnclosingMethod,Signature,InnerClasses
+-dontwarn com.yausername.**
+-dontwarn com.fasterxml.jackson.**
+-dontwarn io.github.junkfood02.**

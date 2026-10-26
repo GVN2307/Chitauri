@@ -1,0 +1,46 @@
+# Rust build artifacts
+target/
+**/target/
+**/*.rs.bk
+Cargo.lock.bk
+
+# Flutter build artifacts
+chitauri_flutter/build/
+**/build/
+chitauri_flutter/.dart_tool/
+**/.dart_tool/
+chitauri_flutter/.flutter-plugins
+chitauri_flutter/.flutter-plugins-dependencies
+chitauri_flutter/.pub-cache/
+chitauri_flutter/.pub/
+
+# Android build & secrets
+**/.gradle/
+**/local.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+*.keystore
+dist/
+**/dist/
+*.apk
+*.aab
+*.zip
+
+# Temp / test captures
+screen*.png
+*screen*.png
+proof_*.png
+running_app.png
+scratch*.m4a
+*.tmp
+*.part
+*.ytdl
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log
