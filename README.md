@@ -247,6 +247,18 @@ To launch the pre-built desktop application directly on Windows:
 .\chitauri.exe
 ```
 
+### Laptop and Desktop Installation
+To install and register Chitauri as a native Windows application on your laptop:
+
+- **Automatic Registration**: Running `chitauri.exe` automatically provisions the official desktop and Start Menu shortcuts.
+- **One-Click Installer**: Run `install.bat` or PowerShell script:
+  ```powershell
+  .\install.ps1
+  ```
+- **Desktop Shortcut**: Placed at `%USERPROFILE%\Desktop\Chitauri.lnk` with the official logo icon.
+- **Start Menu Apps List**: Registered under `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chitauri.lnk` so it stays permanently indexed and searchable in Windows Start.
+- **Windows Run Command**: Registered in Windows App Paths so pressing `Win + R` and typing `chitauri` launches the application directly.
+
 To run from source:
 ```powershell
 python -m venv app_venv

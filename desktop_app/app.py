@@ -223,6 +223,11 @@ class ChitauriDesktopServer(SimpleHTTPRequestHandler):
             self._send_json({"status": "opened", "path": str(MUSIC_DIR)})
             return
 
+        if path == "/api/install_shortcuts":
+            ensure_windows_shortcuts()
+            self._send_json({"status": "installed"})
+            return
+
         if path == "/api/save_screenshot":
             name = payload.get("name", "screenshot.png")
             data_str = payload.get("data", "")
@@ -736,7 +741,66 @@ def compute_storage_stats():
     }
 
 
-# 7. Start HTTP Server
+# 7. Windows Laptop Application & Shortcuts Integration
+def ensure_windows_shortcuts():
+    if os.name != "nt":
+        return
+
+    exe_path = Path(sys.executable).resolve()
+    if "python" in exe_path.name.lower():
+        candidate = Path(__file__).resolve().parent.parent / "chitauri.exe"
+        if candidate.exists():
+            exe_path = candidate
+        else:
+            return
+
+    desktop_lnk = Path.home() / "Desktop" / "Chitauri.lnk"
+    start_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    start_lnk = start_dir / "Chitauri.lnk"
+
+    ico_path = exe_path.parent / "desktop_app" / "logo.ico"
+    if not ico_path.exists():
+        ico_path = exe_path.parent / "assets" / "logo.ico"
+    if not ico_path.exists():
+        ico_path = exe_path
+
+    ps_code = f"""
+$ws = New-Object -ComObject WScript.Shell
+$s1 = $ws.CreateShortcut('{desktop_lnk}')
+$s1.TargetPath = '{exe_path}'
+$s1.IconLocation = '{ico_path},0'
+$s1.Description = 'Chitauri Desktop Audio Suite'
+$s1.WorkingDirectory = '{exe_path.parent}'
+$s1.Save()
+
+$s2 = $ws.CreateShortcut('{start_lnk}')
+$s2.TargetPath = '{exe_path}'
+$s2.IconLocation = '{ico_path},0'
+$s2.Description = 'Chitauri Desktop Audio Suite'
+$s2.WorkingDirectory = '{exe_path.parent}'
+$s2.Save()
+
+try {{
+    $rk = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chitauri.exe'
+    if (-not (Test-Path $rk)) {{ New-Item -Path $rk -Force | Out-Null }}
+    Set-ItemProperty -Path $rk -Name '(Default)' -Value '{exe_path}'
+    Set-ItemProperty -Path $rk -Name 'Path' -Value '{exe_path.parent}'
+}} catch {{}}
+"""
+    try:
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_code],
+            startupinfo=startupinfo,
+            check=False,
+            timeout=8
+        )
+    except Exception as e:
+        print(f"Shortcut setup note: {e}")
+
+
+# 8. Start HTTP Server
 def start_server():
     global ACTIVE_SERVER_PORT
     server = ThreadingHTTPServer(("127.0.0.1", 0), ChitauriDesktopServer)
@@ -746,8 +810,22 @@ def start_server():
     return f"http://127.0.0.1:{ACTIVE_SERVER_PORT}"
 
 
-# 8. Main Entrypoint
+# 9. Main Entrypoint
 def main():
+    if os.name == "nt":
+        # 1. Set AppUserModelID so Windows taskbar groups and shows official icon
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("com.chitauri.audio.desktop")
+        except Exception:
+            pass
+
+        # 2. Automatically ensure desktop and start menu shortcuts exist
+        try:
+            ensure_windows_shortcuts()
+        except Exception as e:
+            print(f"Auto shortcut error: {e}")
+
     server_url = start_server()
     print(f"Chitauri Desktop Server running on {server_url}")
 
