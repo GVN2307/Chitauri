@@ -5,7 +5,7 @@ a = Analysis(
     ['c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/app.py'],
     pathex=[],
     binaries=[],
-    datas=[('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/index.html', 'desktop_app'), ('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/index.html', '.')],
+    datas=[('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/index.html', 'desktop_app'), ('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/index.html', '.'), ('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/logo.png', '.'), ('c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/logo.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,4 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['c:/Users/veera/Desktop/Codes for fun/Chitauri/desktop_app/logo.ico'],
 )

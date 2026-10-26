@@ -96,6 +96,16 @@ class ChitauriDesktopServer(SimpleHTTPRequestHandler):
             self._send_json(results)
             return
 
+        # REST API: Stream URL (Live YouTube Audio Stream Resolver)
+        if path == "/api/stream_url":
+            video_id = query.get("id", [""])[0].strip()
+            if not video_id:
+                self._send_json({"error": "Missing video id"}, status=400)
+                return
+            stream_info = resolve_live_stream_url(video_id)
+            self._send_json(stream_info)
+            return
+
         # REST API: Library
         if path == "/api/library":
             lib = get_library_catalog()
@@ -138,6 +148,36 @@ class ChitauriDesktopServer(SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 data = index_path.read_bytes()
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+        if path == "/logo.png":
+            logo_path = base_dir / "logo.png"
+            if not logo_path.exists():
+                logo_path = base_dir / "desktop_app" / "logo.png"
+            if not logo_path.exists():
+                logo_path = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
+            if logo_path.exists():
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                data = logo_path.read_bytes()
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+        if path in ("/logo.ico", "/favicon.ico"):
+            ico_path = base_dir / "logo.ico"
+            if not ico_path.exists():
+                ico_path = base_dir / "desktop_app" / "logo.ico"
+            if not ico_path.exists():
+                ico_path = Path(__file__).resolve().parent.parent / "assets" / "logo.ico"
+            if ico_path.exists():
+                self.send_response(200)
+                self.send_header("Content-Type", "image/x-icon")
+                data = ico_path.read_bytes()
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -272,10 +312,77 @@ class ChitauriDesktopServer(SimpleHTTPRequestHandler):
         pass
 
 
-# 4. Search Implementation (High resilience: yt_dlp python module or yt-dlp CLI)
+# 4. Search & Stream Resolution (High resilience: yt_dlp python module or yt-dlp CLI)
+def resolve_live_stream_url(video_id):
+    # Check if file exists in offline vault
+    catalog = get_library_catalog()
+    for item in catalog:
+        if item.get("id") == video_id and item.get("filename"):
+            fn = item["filename"]
+            fp = MUSIC_DIR / fn
+            if fp.exists():
+                return {
+                    "url": f"http://127.0.0.1:{ACTIVE_SERVER_PORT}/stream/{urllib.parse.quote(fn)}",
+                    "is_local": True,
+                    "title": item.get("title", ""),
+                    "artist": item.get("artist", ""),
+                    "thumbnail": item.get("thumbnail", "")
+                }
+
+    # Extract direct audio stream URL from YouTube
+    if HAS_YTDLP_MODULE:
+        try:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+                stream_url = info.get("url")
+                if stream_url:
+                    return {
+                        "url": stream_url,
+                        "is_local": False,
+                        "title": info.get("title", ""),
+                        "artist": info.get("channel") or info.get("uploader") or "Artist",
+                        "thumbnail": info.get("thumbnail") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+                    }
+        except Exception as e:
+            print(f"yt_dlp stream resolution error: {e}")
+
+    try:
+        cmd = [YTDLP_BIN, "-g", "-f", "bestaudio/best", f"https://www.youtube.com/watch?v={video_id}"]
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, startupinfo=startupinfo)
+        stdout, _ = proc.communicate(timeout=15)
+        raw_url = stdout.strip().split("\n")[0].strip()
+        if raw_url.startswith("http"):
+            return {
+                "url": raw_url,
+                "is_local": False
+            }
+    except Exception as e:
+        print(f"CLI stream resolution error: {e}")
+
+    return {"error": "Could not resolve stream URL"}
+
+
 def perform_search(query):
-    if not query:
-        return []
+    clean = query.strip()
+    if not clean or clean.lower() in ("home", "trending", "yt home"):
+        target_query = "ytsearch16:Trending Music Charts"
+        is_direct_url = False
+    elif clean.startswith("http://") or clean.startswith("https://") or "youtube.com/" in clean or "youtu.be/" in clean:
+        target_query = clean
+        is_direct_url = True
+    else:
+        target_query = f"ytsearch16:{clean}"
+        is_direct_url = False
 
     # Priority 1: Direct yt_dlp Python module
     if HAS_YTDLP_MODULE:
@@ -284,12 +391,17 @@ def perform_search(query):
                 "quiet": True,
                 "no_warnings": True,
                 "extract_flat": True,
-                "skip_download": True,
-                "default_search": "ytsearch14"
+                "skip_download": True
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                res = ydl.extract_info(f"ytsearch14:{query}", download=False)
-                entries = res.get("entries", [])
+                res = ydl.extract_info(target_query, download=False)
+                if not res:
+                    entries = []
+                elif "entries" in res:
+                    entries = res.get("entries") or []
+                else:
+                    entries = [res]
+
                 results = []
                 for item in entries:
                     if not item:
@@ -318,9 +430,10 @@ def perform_search(query):
 
     # Priority 2: yt-dlp CLI fallback
     try:
+        cli_target = target_query if is_direct_url else target_query
         cmd = [
             YTDLP_BIN,
-            f"ytsearch14:{query}",
+            cli_target,
             "--dump-json",
             "--flat-playlist",
             "--no-warnings"
