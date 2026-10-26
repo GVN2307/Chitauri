@@ -192,30 +192,37 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
 
 ## Desktop Application (`chitauri.exe`)
 
-The desktop client is a pure Rust executable compiled directly from the root workspace.
+The desktop client is a standalone Windows executable engineered to provide identical visual design, audio features, and operational workflows as the Android mobile client.
 
 ### Executable Information
 - **File Name:** `chitauri.exe`
 - **Location:** Repository root (`./chitauri.exe`)
-- **Binary Size:** ~23.1 MB
-- **Compilation Profile:** Rust 1.80+ Release (`--release`, optimized)
-- **GUI Engine:** Immediate-mode `egui` via `eframe`
-- **Audio Subsystem:** `rodio` with `symphonia` pure Rust decoders
+- **Binary Size:** ~12.9 MB (Standalone single-file executable)
+- **GUI Engine:** Microsoft Edge Chromium WebView2 Runtime (Hardware Accelerated 60 FPS)
+- **Audio Subsystem:** HTML5 Audio Engine with local HTTP 206 Partial Content range seeking
+- **Backend Extractor:** Integrated yt-dlp & FFmpeg audio pipeline (100% reliable YouTube search & download)
+- **Storage Directory:** `%USERPROFILE%\Music\ChitauriMusic\` protected by `.nomedia` sentinel
+
+### Key Features of the Windows Desktop Application
+1. **Search & One-Tap Grab:** Instantaneous YouTube search with high-resolution thumbnails, channel titles, durations, and quick filter chips.
+2. **Real Audio Extraction:** Downloads genuine MP3 audio streams at highest bitrate with embedded artwork and ID3 metadata tags.
+3. **Duplicate Resolution:** Automatically detects existing tracks and prompts whether to skip or create an indexed duplicate.
+4. **Offline Library Management:** Real-time track catalog, duration tracking, instant playback, and disk removal.
+5. **Interactive Vinyl Turntable Player:** Smooth rotating vinyl disc synchronized to playback state, turntable needle, time scrubber, volume bar, Fisher-Yates shuffle (current song pinned), and 3-state repeat mode.
+6. **Device & Storage Profile:** Live storage tracking (total tracks and megabytes saved) and direct shortcut to open the isolated music directory in Windows File Explorer.
 
 ### Running the Desktop Application
-To run the pre-built application directly:
+To launch the pre-built desktop application directly on Windows:
 ```powershell
 .\chitauri.exe
 ```
 
-To compile and execute from source:
+To run from source:
 ```powershell
-cargo run --release
-```
-
-To execute the test suite:
-```powershell
-cargo test --release
+python -m venv env
+.\env\Scripts\activate
+pip install pywebview pyinstaller
+python desktop_app\app.py
 ```
 
 ---
@@ -259,7 +266,10 @@ Chitauri/
 |-- assets/
 |   +-- logo.png                        # Application branding logo
 |-- build_apk.ps1                       # Android APK compilation automation script
-|-- chitauri.exe                        # Standalone Windows desktop application
+|-- chitauri.exe                        # Standalone Windows desktop application (12.9 MB)
+|-- desktop_app/                        # Windows Desktop Application source
+|   |-- app.py                          # Desktop controller & extraction bridge
+|   +-- index.html                      # Desktop UI & interactive vinyl player
 |-- chitauri_flutter/                   # Android Mobile Application codebase
 |   |-- android/
 |   |   |-- app/
