@@ -34,73 +34,61 @@ The Chitauri repository hosts three distinct engineering implementations, each t
 
 ## 3. High-Level Architectural Topology
 
-```
-+---------------------------------------------------------------------------------------------------------+
-|                                           PRESENTATION LAYER                                            |
-|                                                                                                         |
-|   +------------------------------------+   +------------------------------------+   +---------------+   |
-|   | Windows Desktop Suite (WebView2)   |   | Android Mobile Client (Flutter UI) |   | Rust Core     |   |
-|   | - 1260x820 Widescreen Layout       |   | - Touch Feed & YouTube Grabber     |   |   Reference   |   |
-|   | - Left Navigation Sidebar & Stats  |   | - Docked Persistent Mini-Player    |   | - egui/eframe |   |
-|   | - YouTube Live Exploration Grid    |   | - Fullscreen Vinyl Turntable Sheet |   |   Immediate   |   |
-|   | - Tabular Offline Library Vault    |   | - Lockscreen Notification Controls |   |   Canvas      |   |
-|   | - Turntable Studio & Spectrum Vis  |   | - Storage Allocation Monitor       |   |               |   |
-|   +-----------------+------------------+   +-----------------+------------------+   +-------+-------+   |
-+---------------------|----------------------------------------|------------------------------|-----------+
-                      | REST API / HTTP 206                    | Platform MethodChannels      | MPSC Bus
-                      v                                        v                              v
-+---------------------------------------------------------------------------------------------------------+
-|                                        CONTROL & SERVICE LAYER                                          |
-|                                                                                                         |
-|   +------------------------------------+   +------------------------------------+   +---------------+   |
-|   | Internal Desktop Server (Python)   |   | Android Native Platform Services   |   | Tokio Runtime |   |
-|   | - Localhost Asynchronous Server    |   | - ChitauriDownloadService (Kotlin) |   | - Multi-      |   |
-|   | - HTTP 206 Partial Content Stream  |   | - ChitauriPlaybackService (Kotlin) |   |   threaded    |   |
-|   | - Endpoints: search/download/lib   |   | - Hardware MediaMetadataRetriever  |   |   Worker Pool |   |
-|   | - Multi-Threaded Download Manager  |   | - Notification & MediaSession API  |   | - Dual-Queue  |   |
-|   | - Dual-Queue State Machine         |   | - Partial CPU Wake Lock Controller |   |   State Mach. |   |
-|   +-----------------+------------------+   +-----------------+------------------+   +-------+-------+   |
-+---------------------|----------------------------------------|------------------------------|-----------+
-                      | Local Stream Extraction Engine         | QuickJS / InnerTube          | Reqwest
-                      v                                        v                              v
-+---------------------------------------------------------------------------------------------------------+
-|                                    EXTRACTION & STREAMING LAYER                                         |
-|                                                                                                         |
-|   +-------------------------------------------------------------------------------------------------+   |
-|   | Direct Client-Side Stream Resolver                                                              |   |
-|   | - Anonymous Android & Web Client Context Emulation (No Google Authentication Required)          |   |
-|   | - Integrated yt-dlp & FFmpeg 320kbps MP3 Audio Extraction Engine                                |   |
-|   | - Embedded QuickJS JavaScript Signature Deciphering Engine                                      |   |
-|   | - Adaptive Audio Stream Extraction (AAC itag 140 / Opus itag 251)                               |   |
-|   | - Chunked Asynchronous Downloader with Dynamic Percentage Telemetry                             |   |
-|   +------------------------------------------------+------------------------------------------------+   |
-+----------------------------------------------------|----------------------------------------------------+
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                                     AUDIO ENGINE & HARDWARE OUTPUT                                      |
-|                                                                                                         |
-|   +------------------------------------+   +------------------------------------+   +---------------+   |
-|   | Desktop Audio Engine               |   | Android Audio Sink                 |   | Rust Rodio    |   |
-|   | - HTML5 Audio Engine + Range Stream|   | - Android AAudio / Oboe Native API |   | - Symphonia   |   |
-|   | - Web Audio API AnalyserNode       |   | - Hardware DSP Offload             |   |   Decoders    |   |
-|   | - 36-Band Real-Time Spectrum Canvas|   | - Low-Power Sleep-State Playback   |   | - CPAL WASAPI |   |
-|   +------------------------------------+   +------------------------------------+   +---------------+   |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                                     PERSISTENCE & STORAGE ISOLATION                                     |
-|                                                                                                         |
-|   +-------------------------------------------------------------------------------------------------+   |
-|   | Local Media Isolation Directory (/Music/ChitauriMusic/)                                         |   |
-|   |                                                                                                 |   |
-|   | |-- .nomedia             (Atomic sentinel preventing MediaScanner indexing)                     |   |
-|   | |-- tracks_catalog.json  (Synchronous metadata catalog and playback cache)                      |   |
-|   | |-- playlists.json       (Custom playlist structures and track ordering)                        |   |
-|   | |-- thumbnails/          (Locally cached album art and artwork assets)                          |   |
-|   | +-- *.mp3 / *.m4a        (ID3v2 / MP4 atom tagged tracks, open for File Manager access)         |   |
-|   +-------------------------------------------------------------------------------------------------+   |
-+---------------------------------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph PresentationLayer["1. Presentation Layer"]
+        WinUI["Windows Desktop Suite<br>(WebView2 / 1260x820 Widescreen)"]
+        AndroidUI["Android Mobile Client<br>(Flutter 3.x / Material 3)"]
+        RustUI["Rust Reference Core<br>(egui immediate canvas)"]
+    end
+
+    subgraph ServiceLayer["2. Control and Service Layer"]
+        WinServer["Desktop Localhost REST Server<br>(Python 3.14 Async / HTTP 206)"]
+        AndroidSvc["Android Platform Services<br>(Kotlin Foreground Services & WakeLock)"]
+        RustWorker["Tokio Multi-Threaded Runtime<br>(MPSC Task Channels)"]
+    end
+
+    subgraph ExtractionLayer["3. Extraction and Streaming Layer"]
+        ClientProfile["Anonymous Client Context<br>(Android Music / Web Profile)"]
+        CipherResolver["yt-dlp Engine & QuickJS<br>(Signature Decipherer & Cipher Solver)"]
+        StreamSelector["Adaptive Stream Selector<br>(AAC itag 140 / Opus itag 251)"]
+    end
+
+    subgraph AudioEngineLayer["4. Audio Engine and Hardware Sinks"]
+        WinAudio["Desktop Web Audio API<br>(HTML5 Audio + 36-Band Spectrum Visualizer)"]
+        AndroidAudio["Android AAudio / Oboe Sink<br>(Hardware DSP Offload)"]
+        RustAudio["Rodio 0.17 Audio Sink<br>(Symphonia Decoders & CPAL)"]
+    end
+
+    subgraph StorageVaultLayer["5. Persistence and Storage Isolation"]
+        VaultDir["Local Vault Directory<br>(/Music/ChitauriMusic/)"]
+        SentinelFile["nomedia Sentinel File<br>(OS Media Crawler Suppression)"]
+        MetadataCatalog["tracks_catalog.json<br>(Synchronous Track Registry)"]
+        AudioFiles["High-Bitrate Media Files<br>(ID3 Tagged MP3 / M4A)"]
+    end
+
+    WinUI -->|"Local REST & HTTP 206"| WinServer
+    AndroidUI -->|"Platform MethodChannels"| AndroidSvc
+    RustUI -->|"MPSC Channels"| RustWorker
+
+    WinServer --> ClientProfile
+    AndroidSvc --> ClientProfile
+    RustWorker --> ClientProfile
+
+    ClientProfile --> CipherResolver
+    CipherResolver --> StreamSelector
+
+    StreamSelector --> WinAudio
+    StreamSelector --> AndroidAudio
+    StreamSelector --> RustAudio
+
+    WinServer -->|"Atomic Write"| VaultDir
+    AndroidSvc -->|"Atomic Write"| VaultDir
+    RustWorker -->|"Atomic Write"| VaultDir
+
+    VaultDir --> SentinelFile
+    VaultDir --> MetadataCatalog
+    VaultDir --> AudioFiles
 ```
 
 ---
@@ -182,9 +170,71 @@ When shuffle mode is toggled:
 - `RepeatMode::All`: The queue loops back to index `0` upon reaching the end.
 - `RepeatMode::One`: The current track repeats indefinitely (`currentTime = 0`).
 
+```mermaid
+stateDiagram-v2
+    [*] --> RepeatOff: Initial State
+    RepeatOff --> RepeatAll: User Toggles Repeat
+    RepeatAll --> RepeatOne: User Toggles Repeat
+    RepeatOne --> RepeatOff: User Toggles Repeat
+```
+
+#### Dual-Queue & Fisher-Yates Pinned Shuffle Flow
+
+```mermaid
+flowchart LR
+    subgraph NormalSeq["Sequential Playback Mode"]
+        OrigQueue["Original Queue<br>[Track A, Track B, Track C, Track D]"]
+    end
+
+    subgraph ShuffleExec["Shuffle Activated (Track B Active)"]
+        Pin["Pin Active Track to Index 0<br>[Track B]"]
+        ShuffleRemaining["Fisher-Yates Shuffle Remaining Items<br>[Track D, Track A, Track C]"]
+        PlaybackQueue["Active Playback Queue<br>[Track B, Track D, Track A, Track C]"]
+    end
+
+    subgraph RestoredSeq["Shuffle Deactivated"]
+        RestoredQueue["Original Queue Restored<br>[Track A, Track B, Track C, Track D]"]
+        ResumeIndex["Active Track B Retained at Original Index 1"]
+    end
+
+    OrigQueue -->|"Toggle Shuffle ON"| Pin
+    Pin --> ShuffleRemaining
+    ShuffleRemaining --> PlaybackQueue
+    PlaybackQueue -->|"Toggle Shuffle OFF"| RestoredQueue
+    RestoredQueue --> ResumeIndex
+```
+
 ---
 
 ### 4.5 Storage Isolation Protocol (`.nomedia`)
+
+```mermaid
+flowchart TD
+    subgraph StorageVault["Storage Vault: /Music/ChitauriMusic/"]
+        Sentinel[".nomedia Sentinel (0-byte file)"]
+        Catalog["tracks_catalog.json (Registry)"]
+        Playlists["playlists.json (Playlists)"]
+        Art["thumbnails/ (Album Artwork)"]
+        Tracks["*.mp3 / *.m4a (Tagged Audio Files)"]
+    end
+
+    subgraph OSScanners["Operating System Media Crawlers"]
+        AndroidScanner["Android MediaScanner"]
+        WinIndexer["Windows Indexing Service"]
+        ThirdPartyPlayers["Third-Party Players (Spotify, VLC, Apple Music)"]
+    end
+
+    subgraph UserAccess["User Direct Access"]
+        WinExplorer["Windows File Explorer"]
+        AndroidFiles["Android Files / Native File Manager"]
+    end
+
+    OSScanners -.->|"Blocked by .nomedia"| Sentinel
+    Sentinel -.->|"Excluded from global MediaStore"| StorageVault
+
+    UserAccess ==>|"Direct Full Read & Write Access"| Tracks
+    UserAccess ==>|"Manual Backup & Transfer"| StorageVault
+```
 
 ```
 %USERPROFILE%\Music\ChitauriMusic\  (or /sdcard/Music/ChitauriMusic/)
@@ -203,29 +253,24 @@ When shuffle mode is toggled:
 
 ## 5. End-to-End Operational Pipeline: Song Selection to Playback
 
-```
-[ User Search Input or Category Click ]
-                  |
-                  v
-[ Phase 1: InnerTube Search & Response Normalization ]
-                  |
-                  v
-[ Phase 2: Duplicate Detection & Title Sanitization ]
-                  |
-                  v
-[ Phase 3: Adaptive Stream Resolution & Deciphering ]
-                  |
-                  v
-[ Phase 4: Chunked Download & Background Service ]
-                  |
-                  v
-[ Phase 5: Hardware Duration Verification & ID3 Tagging ]
-                  |
-                  v
-[ Phase 6: Storage Isolation (.nomedia) & Catalog Sync ]
-                  |
-                  v
-[ Phase 7: Deterministic Playback & Spectrum Visualization ]
+```mermaid
+flowchart TD
+    Step0["User Search Input or Genre Pill Selection"]
+    Step1["Phase 1: InnerTube Search & Response Normalization<br>(Parse Video ID, Title, Channel, Duration, Art)"]
+    Step2["Phase 2: Duplicate Detection & Filename Sanitization<br>(Strip Illegal Characters, Resolve Collisions)"]
+    Step3["Phase 3: Adaptive Stream Resolution & Cipher Solver<br>(Extract AAC itag 140 / Opus itag 251, Decipher Signature)"]
+    Step4["Phase 4: Chunked Download & Background Service<br>(HTTP Range Requests, Android WakeLock / Desktop Thread Pool)"]
+    Step5["Phase 5: Hardware Duration Verification & ID3 Tagging<br>(MediaMetadataRetriever / FFmpeg Duration Verification & Metadata Injection)"]
+    Step6["Phase 6: Storage Isolation (.nomedia) & Catalog Sync<br>(Atomic Save in ChitauriMusic/, Update tracks_catalog.json)"]
+    Step7["Phase 7: Deterministic Playback & Visualizer Sync<br>(HTTP 206 Streaming, Web Audio API 36-Band Spectrum, Turntable 33 RPM)"]
+
+    Step0 --> Step1
+    Step1 --> Step2
+    Step2 --> Step3
+    Step3 --> Step4
+    Step4 --> Step5
+    Step5 --> Step6
+    Step6 --> Step7
 ```
 
 ### Phase 1: InnerTube Search & Response Normalization

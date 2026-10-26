@@ -24,6 +24,36 @@ The Chitauri Android Mobile Client (`com.chitauri.audio`) is a client-side audio
 5. **Storage Isolation Protocol**: All downloaded tracks are saved to `/Music/ChitauriMusic/` with an atomic `.nomedia` sentinel file, preventing third-party media crawlers (`MediaScanner`, Spotify, VLC) from indexing tracks while keeping them accessible in file managers.
 6. **16 KB Memory Page Alignment**: Built with `0x4000` page alignment for Android 15 and Android 16 64-bit architecture compatibility.
 
+```mermaid
+flowchart TD
+    subgraph FlutterPresentation["Flutter Presentation Layer (lib/views/)"]
+        SearchView["YouTube Search & Grabber View"]
+        LibraryView["Offline Vault Table & Playlists"]
+        TurntableSheet["Vinyl Player & Turntable Sheet"]
+        ProfileView["Storage Metrics Profile"]
+    end
+
+    subgraph PlatformBridge["Android Platform Channels"]
+        MethodChannel["Platform MethodChannels"]
+    end
+
+    subgraph NativeAndroid["Android Native Services (Kotlin)"]
+        DownloadSvc["ChitauriDownloadService<br>(DATA_SYNC Foreground Service + WakeLock)"]
+        PlaybackSvc["ChitauriPlaybackService<br>(MediaSessionCompat + Notification Controls)"]
+        Retriever["MediaMetadataRetriever<br>(Hardware Millisecond Decoder)"]
+    end
+
+    subgraph StorageVault["Isolated Storage Vault (/Music/ChitauriMusic/)"]
+        Sentinel[".nomedia Sentinel File"]
+        Catalog["tracks_catalog.json"]
+        AudioTracks["*.mp3 / *.m4a Audio Files"]
+    end
+
+    FlutterPresentation --> MethodChannel
+    MethodChannel --> NativeAndroid
+    NativeAndroid --> StorageVault
+```
+
 ---
 
 ## Build Specifications

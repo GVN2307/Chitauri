@@ -56,75 +56,52 @@ The suite provides three operational components:
 
 ### Architectural Topology
 
-```
-+---------------------------------------------------------------------------------------+
-|                               PRESENTATION LAYER                                      |
-|                                                                                       |
-|   +------------------------------------+   +--------------------------------------+   |
-|   | Windows Desktop Suite (WebView2)   |   | Android Client (Flutter UI)          |   |
-|   | - 1260x820 Widescreen Responsive   |   | - Miniature Search & Filter Feed     |   |
-|   | - Left Navigation Sidebar & Stats  |   | - Vinyl Turntable Player Sheet       |   |
-|   | - Responsive YouTube Cards Grid    |   | - Offline Library & Playlists        |   |
-|   | - Tabular Offline Library View     |   | - Storage Allocation Monitor         |   |
-|   | - Dedicated Active Download Queue  |   | - Docked Persistent Mini-Player      |   |
-|   | - Turntable Studio & Spectrum Vis  |   | - Lockscreen Media Controls          |   |
-|   | - Persistent Bottom Player Bar     |   |                                      |   |
-|   +-----------------+------------------+   +-------------------+------------------+   |
-+---------------------|------------------------------------------|----------------------+
-                      | REST API / HTTP 206                      | Platform MethodChannels
-                      v                                          v
-+---------------------------------------------------------------------------------------+
-|                             CONTROL & SERVICE LAYER                                   |
-|                                                                                       |
-|   +------------------------------------+   +--------------------------------------+   |
-|   | Internal Desktop Server (Python)   |   | Android Platform Services (Kotlin)   |   |
-|   | - ThreadingHTTPServer (Localhost)  |   | - ChitauriDownloadService            |   |
-|   | - HTTP 206 Partial Content Stream  |   | - ChitauriPlaybackService            |   |
-|   | - Endpoints: search/download/lib   |   | - Hardware MediaMetadataRetriever    |   |
-|   | - Real-time Download Thread Pool   |   | - Notification & MediaSession API    |   |
-|   | - Dual-Queue Playback State Engine |   | - Partial CPU Wake Lock Management   |   |
-|   +-----------------+------------------+   +-------------------+------------------+   |
-+---------------------|------------------------------------------|----------------------+
-                      | Local Stream Extraction Engine           | QuickJS / InnerTube
-                      v                                          v
-+---------------------------------------------------------------------------------------+
-|                          EXTRACTION & STREAMING LAYER                                 |
-|                                                                                       |
-|   +-------------------------------------------------------------------------------+   |
-|   | Direct Client-Side Stream Resolver                                            |   |
-|   | - Anonymous Android & Web Client Context Emulation                            |   |
-|   | - yt-dlp & FFmpeg 320kbps MP3 Audio Extraction Pipeline                       |   |
-|   | - QuickJS JavaScript Signature Deciphering Engine                             |   |
-|   | - Adaptive Audio Stream Extraction (AAC itag 140 / Opus itag 251)             |   |
-|   | - Chunked Asynchronous Downloader with Dynamic Percentage Telemetry           |   |
-|   +---------------------------------------+---------------------------------------+   |
-+-------------------------------------------|-------------------------------------------+
-                                            v
-+---------------------------------------------------------------------------------------+
-|                           AUDIO ENGINE & HARDWARE OUTPUT                              |
-|                                                                                       |
-|   +------------------------------------+   +--------------------------------------+   |
-|   | Desktop Audio Engine               |   | Android Audio Sink                   |   |
-|   | - HTML5 Audio Engine + Range Stream|   | - Android AAudio / Oboe Native API   |   |
-|   | - Web Audio API Analyser Node      |   | - Hardware DSP Offload               |   |
-|   | - 36-Band Real-Time Spectrum Canvas|   | - Low-Power Sleep-State Playback     |   |
-|   +------------------------------------+   +--------------------------------------+   |
-+-------------------------------------------+-------------------------------------------+
-                                            |
-                                            v
-+---------------------------------------------------------------------------------------+
-|                           PERSISTENCE & STORAGE ISOLATION                             |
-|                                                                                       |
-|   +-------------------------------------------------------------------------------+   |
-|   | Local Media Isolation Directory: /Music/ChitauriMusic/                        |   |
-|   |                                                                               |   |
-|   | |-- .nomedia             (Atomic sentinel preventing MediaScanner indexing)   |   |
-|   | |-- tracks_catalog.json  (Synchronous metadata catalog and playback cache)    |   |
-|   | |-- playlists.json       (Custom playlist structures and track ordering)      |   |
-|   | |-- thumbnails/          (Locally cached album art and artwork assets)        |   |
-|   | +-- *.mp3 / *.m4a        (ID3v2 / MP4 atom tagged tracks, open for File Mgr)  |   |
-|   +-------------------------------------------------------------------------------+   |
-+---------------------------------------------------------------------------------------+
+```mermaid
+flowchart TD
+    subgraph PresentationLayer["1. Presentation Layer"]
+        WinUI["Windows Desktop Suite<br>(WebView2 / 1260x820 Widescreen)"]
+        AndroidUI["Android Client<br>(Flutter UI / Material 3)"]
+    end
+
+    subgraph ServiceLayer["2. Control and Service Layer"]
+        WinServer["Internal Desktop Server<br>(Python 3.14 Localhost / HTTP 206)"]
+        AndroidSvc["Android Platform Services<br>(Kotlin Foreground Services & WakeLock)"]
+    end
+
+    subgraph ExtractionLayer["3. Extraction and Streaming Layer"]
+        ClientProfile["Direct Client-Side Stream Resolver<br>(Anonymous Client Emulation)"]
+        Extractor["yt-dlp Engine & QuickJS<br>(Cipher Solver & 320kbps Extraction)"]
+    end
+
+    subgraph AudioEngineLayer["4. Audio Engine and Hardware Output"]
+        WinAudio["Desktop Audio Engine<br>(Web Audio API Analyser & 36-Band Canvas)"]
+        AndroidAudio["Android Audio Sink<br>(AAudio / Oboe Native Hardware DSP)"]
+    end
+
+    subgraph StorageVaultLayer["5. Persistence and Storage Isolation"]
+        StorageDir["Local Media Isolation Directory<br>(/Music/ChitauriMusic/)"]
+        NomediaSentinel[".nomedia Sentinel<br>(Blocks MediaScanner & Indexers)"]
+        Catalog["tracks_catalog.json<br>(Synchronous Track Metadata)"]
+        Files["Tagged Audio Files<br>(ID3 MP3 / M4A Accessible in File Mgr)"]
+    end
+
+    WinUI -->|"REST API / HTTP 206"| WinServer
+    AndroidUI -->|"Platform MethodChannels"| AndroidSvc
+
+    WinServer --> ClientProfile
+    AndroidSvc --> ClientProfile
+
+    ClientProfile --> Extractor
+
+    Extractor --> WinAudio
+    Extractor --> AndroidAudio
+
+    WinServer --> StorageDir
+    AndroidSvc --> StorageDir
+
+    StorageDir --> NomediaSentinel
+    StorageDir --> Catalog
+    StorageDir --> Files
 ```
 
 ---
@@ -133,29 +110,24 @@ The suite provides three operational components:
 
 The Chitauri audio pipeline operates entirely on the client device. Below is the technical breakdown of each phase from song search to offline playback.
 
-```
-[ User Search Input ]
-         |
-         v
-[ Phase 1: InnerTube Query & Response Parsing ]
-         |
-         v
-[ Phase 2: Selection & Duplicate Verification ]
-         |
-         v
-[ Phase 3: Adaptive Stream Resolution & Deciphering ]
-         |
-         v
-[ Phase 4: Chunked Download & Background Worker ]
-         |
-         v
-[ Phase 5: Hardware Metadata Extraction & ID3 Tagging ]
-         |
-         v
-[ Phase 6: Storage Isolation (.nomedia) & Catalog Sync ]
-         |
-         v
-[ Phase 7: Deterministic Playback & Queue Transitions ]
+```mermaid
+flowchart TD
+    Input["User Search Input or Genre Pill Selection"]
+    P1["Phase 1: InnerTube Query & Response Parsing<br>(Parse Video ID, Title, Channel, Duration, Art)"]
+    P2["Phase 2: Selection & Duplicate Verification<br>(Catalog Check, Collision Dialog, Filename Sanitization)"]
+    P3["Phase 3: Adaptive Stream Resolution & Deciphering<br>(Extract AAC itag 140 / Opus itag 251, Unscramble Cipher)"]
+    P4["Phase 4: Chunked Download & Background Worker<br>(Range Request Loop, WakeLock Promotion, Real-time Telemetry)"]
+    P5["Phase 5: Hardware Metadata Extraction & ID3 Tagging<br>(Hardware Duration Verification, High-Res Artwork, ID3v2 Tags)"]
+    P6["Phase 6: Storage Isolation (.nomedia) & Catalog Sync<br>(Atomic Save in ChitauriMusic/, Registry Update, Event Sync)"]
+    P7["Phase 7: Deterministic Playback & Queue Transitions<br>(HTTP 206 Seekable Stream, Turntable 33 RPM, Spectrum Vis)"]
+
+    Input --> P1
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> P5
+    P5 --> P6
+    P6 --> P7
 ```
 
 ### Phase 1: InnerTube Query and Response Parsing

@@ -41,6 +41,47 @@ This document codifies the technical competencies, domain protocols, and operati
 
 ## 2. Skill Verification Standards
 
+```mermaid
+flowchart TD
+    CompetencyMatrix["Chitauri Competency Matrix"]
+
+    subgraph DesktopSkill["skill:desktop-engineering"]
+        DeskTarget["Target: chitauri.exe Execution"]
+        DeskVerify["Verification: 1260x820 Layout, Live Stream, MP3 Extraction"]
+        DeskTarget --> DeskVerify
+    end
+
+    subgraph MobileSkill["skill:android-engineering"]
+        MobileTarget["Target: Release APK (com.chitauri.audio)"]
+        MobileVerify["Verification: 16 KB Page Alignment & Foreground WakeLock"]
+        MobileTarget --> MobileVerify
+    end
+
+    subgraph StorageSkill["skill:storage-isolation"]
+        StorageTarget["Target: .nomedia Sentinel & Path Sanitization"]
+        StorageVerify["Verification: MediaScanner Blocked & Traversal Stripped"]
+        StorageTarget --> StorageVerify
+    end
+
+    subgraph StreamSkill["skill:stream-resolution"]
+        StreamTarget["Target: Client-Side InnerTube Extraction"]
+        StreamVerify["Verification: Cipher Token Solver & High-Bitrate Audio"]
+        StreamTarget --> StreamVerify
+    end
+
+    subgraph AudioSkill["skill:audio-pipeline"]
+        AudioTarget["Target: Dual-Queue & Repeat State Machine"]
+        AudioVerify["Verification: cargo test Unit & Invariant Tests Pass"]
+        AudioTarget --> AudioVerify
+    end
+
+    CompetencyMatrix --> DesktopSkill
+    CompetencyMatrix --> MobileSkill
+    CompetencyMatrix --> StorageSkill
+    CompetencyMatrix --> StreamSkill
+    CompetencyMatrix --> AudioSkill
+```
+
 | Skill ID | Verification Target | Verification Standard |
 | :--- | :--- | :--- |
 | `desktop-engineering` | `chitauri.exe` Standalone Execution | Binary launches, renders 1260x820 widescreen layout, resolves live streams, and saves MP3s locally. |

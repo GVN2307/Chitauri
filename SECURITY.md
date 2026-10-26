@@ -29,6 +29,29 @@ Chitauri enforces storage isolation by creating an atomic sentinel file named `.
 
 #### Enforcement Implementation
 
+```mermaid
+flowchart TD
+    subgraph StorageVault["Chitauri Storage Vault: /Music/ChitauriMusic/"]
+        Sentinel[".nomedia Sentinel (0-byte file)"]
+        Catalog["tracks_catalog.json"]
+        Audio["Protected Audio Files (*.mp3, *.m4a)"]
+    end
+
+    subgraph OSIndexers["OS Media Indexers & Third-Party Apps"]
+        Scanner["MediaScanner / Windows Search"]
+        ThirdParty["Spotify / VLC / Apple Music"]
+    end
+
+    subgraph UserAccess["User Direct Access"]
+        FileManager["Windows Explorer / Android Files"]
+    end
+
+    OSIndexers -.->|"Blocked by .nomedia"| Sentinel
+    Sentinel -.->|"Suppresses MediaStore Registration"| StorageVault
+
+    UserAccess ==>|"Direct Local File Access"| Audio
+```
+
 ```
 ChitauriMusic/
 ├── .nomedia              <-- Suppresses MediaScanner and Windows Indexers
@@ -76,6 +99,14 @@ Track titles extracted from YouTube InnerTube feeds may contain filesystem-reser
 
 ### 3.2 Canonical Path Verification
 Prior to any file deletion or disk modification, the application resolves the absolute path and asserts that the target file is strictly a descendant of the trusted `ChitauriMusic/` directory.
+
+```mermaid
+flowchart TD
+    Input["Raw YouTube Title / Inbound Path"] --> Sanitize["Character Filter: Strip illegal characters & traversal sequences (../)"]
+    Sanitize --> CanonicalCheck{"Canonical Path Check<br>Is resolved path inside ChitauriMusic/?"}
+    CanonicalCheck -->|"No / Outside Vault"| Reject["Abort Operation: Security Exception"]
+    CanonicalCheck -->|"Yes / Inside Vault"| Commit["Commit Operation: Safe Write or Delete"]
+```
 
 ---
 

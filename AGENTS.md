@@ -54,14 +54,19 @@ This document establishes the multi-agent governance model for developing, audit
 
 ## 2. Review & Approval Hierarchy
 
-```
-                             [ Lead Architect ]
-                                      │
-         ┌────────────────────────────┼───────────────────────────┐
-         ▼                            ▼                           ▼
-  [ Storage Guard ]         [ Desktop Specialist ]        [ Mobile Engineer ]
-         │                            │                           │
-         └────────────────────────────┼───────────────────────────┘
-                                      ▼
-                        [ Audio Systems Engineer ]
+```mermaid
+flowchart TD
+    Architect["Lead Architect<br>(agent:lead-architect)"]
+    Storage["Storage & Security Guard<br>(agent:storage-guard)"]
+    Desktop["Windows Desktop Specialist<br>(agent:desktop-specialist)"]
+    Mobile["Android Mobile Engineer<br>(agent:mobile-engineer)"]
+    Audio["Core Systems & Audio Engineer<br>(agent:audio-systems-engineer)"]
+
+    Architect -->|"Architecture Governance & Code Review"| Storage
+    Architect -->|"Desktop Application Release Gates"| Desktop
+    Architect -->|"Android Native & APK Validation"| Mobile
+    
+    Storage -->|"Storage Isolation Invariants"| Audio
+    Desktop -->|"REST API & Desktop State Parity"| Audio
+    Mobile -->|"MethodChannel State Synchronization"| Audio
 ```

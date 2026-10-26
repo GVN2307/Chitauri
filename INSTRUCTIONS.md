@@ -18,6 +18,50 @@ This document provides technical instructions, coding standards, and build proce
 
 ## 2. Repository Layout & Target Mapping
 
+```mermaid
+flowchart TD
+    Repo["Chitauri Workspace Repository"]
+    
+    subgraph DesktopPath["Windows Desktop Suite"]
+        AppPy["desktop_app/app.py"]
+        HtmlUI["desktop_app/index.html"]
+        PyInstaller["PyInstaller Packaging Pipeline"]
+        WinExe["chitauri.exe (19.7 MB Standalone)"]
+        WinInstall["install.bat / install.ps1 (Shortcuts & AppUserModelID)"]
+        
+        AppPy --> PyInstaller
+        HtmlUI --> PyInstaller
+        PyInstaller --> WinExe
+        WinExe --> WinInstall
+    end
+
+    subgraph AndroidPath["Android Mobile Suite"]
+        FlutterLib["chitauri_flutter/lib/"]
+        KotlinServices["chitauri_flutter/android/ (Kotlin Svc)"]
+        BuildScript["build_apk.ps1 / flutter build"]
+        ReleaseApk["app-release.apk (16KB Page Aligned)"]
+        AdbDeploy["adb install -r (Device Deployment)"]
+
+        FlutterLib --> BuildScript
+        KotlinServices --> BuildScript
+        BuildScript --> ReleaseApk
+        ReleaseApk --> AdbDeploy
+    end
+
+    subgraph RustPath["Rust Algorithmic Core"]
+        SrcCode["src/ (player, storage, downloader)"]
+        CargoTests["cargo test (State Machine Verification)"]
+        CargoRun["cargo run (Prototype UI)"]
+
+        SrcCode --> CargoTests
+        SrcCode --> CargoRun
+    end
+
+    Repo --> DesktopPath
+    Repo --> AndroidPath
+    Repo --> RustPath
+```
+
 ```
 Chitauri/
 ├── ARCHITECTURE.md                     # Comprehensive system architecture specification
