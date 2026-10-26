@@ -319,7 +319,6 @@ Chitauri/
 |   |       |-- mini_player.dart                # Docked persistent bottom player
 |   |       +-- vinyl_player_sheet.dart         # Fullscreen turntable player sheet
 |   +-- pubspec.yaml
-|-- res/                                # Android launcher icon mipmaps
 |-- screenshot_desktop_search.png       # Desktop search & explore grid screenshot
 |-- screenshot_desktop_library.png      # Desktop offline vault table screenshot
 |-- screenshot_desktop_player.png       # Desktop vinyl turntable & spectrum screenshot

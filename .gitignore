@@ -27,7 +27,10 @@ dist/
 *.aab
 *.zip
 
-# Python cache
+# Python cache & virtual environments
+app_venv/
+venv/
+env/
 __pycache__/
 *.pyc
 *.pyo

@@ -296,7 +296,133 @@ The audio sink streams the file locally using HTTP 206 range requests. The Web A
 
 ---
 
-## 6. Directory Layout & Source Code Mapping
+## 6. Android Mobile Operational Workflow: Click-to-Execution Deep Dive
+
+This section provides the end-to-end technical operational workflow of the Android mobile client (`com.chitauri.audio`), detailing what occurs across the Flutter Dart UI, platform `MethodChannels`, Android Kotlin Foreground Services, storage isolation, and playback hardware offloading.
+
+```mermaid
+flowchart TD
+    subgraph UIEvent["1. When Clicked (User Action & Ingress)"]
+        UserTap["User Taps Download or Play on Song Card<br>(youtube_search_view.dart / youtube_webview.dart)"]
+        TitleSanitize["Sanitize Title: Strip Traversal (../) & Characters (<>:\"/\\|?*)"]
+        CatalogCheck{"Catalog Collision Check<br>(tracks_catalog.json)"}
+        CollisionPrompt["Show Conflict Dialog:<br>Skip or Save as Title (2).mp3"]
+        StorageStart["StorageService.startDownload(track)"]
+
+        UserTap --> TitleSanitize
+        TitleSanitize --> CatalogCheck
+        CatalogCheck -->|"Duplicate Found"| CollisionPrompt
+        CatalogCheck -->|"New Track"| StorageStart
+        CollisionPrompt -->|"Confirm Download"| StorageStart
+    end
+
+    subgraph ServiceRouting["2. Where It Goes (Platform Ingress)"]
+        MethodChannel["MethodChannel('com.chitauri.audio/downloader')<br>(MainActivity.kt)"]
+        BuildIntent["Build Explicit Intent for ChitauriDownloadService<br>(Action: ACTION_START_DOWNLOAD)"]
+        StartFgService["ContextCompat.startForegroundService()<br>(ForegroundServiceType.DATA_SYNC)"]
+
+        StorageStart --> MethodChannel
+        MethodChannel --> BuildIntent
+        BuildIntent --> StartFgService
+    end
+
+    subgraph DownloadExecution["3. How Download Goes (Service Execution & WakeLock)"]
+        AcquireWakeLock["Acquire CPU PARTIAL_WAKE_LOCK<br>(PowerManager.PARTIAL_WAKE_LOCK)"]
+        PostNotification["Post Foreground Notification with Progress Bar<br>(NotificationCompat.Builder)"]
+        InnerTubePlayer["Query InnerTube Player Endpoint<br>(Anonymous ANDROID_MUSIC Profile)"]
+        CipherSolver["Solve Signature Cipher Tokens & Throttling (n)"]
+        StreamSelect["Select Optimal Audio Stream<br>(AAC itag 140 / Opus itag 251)"]
+        ChunkLoop["64 KB Range-Request HTTP Streaming Loop"]
+        DispatchProgress["Dispatch Progress Events (0% to 100%)<br>(Update Notification Bar & Flutter EventChannel)"]
+
+        StartFgService --> AcquireWakeLock
+        AcquireWakeLock --> PostNotification
+        PostNotification --> InnerTubePlayer
+        InnerTubePlayer --> CipherSolver
+        CipherSolver --> StreamSelect
+        StreamSelect --> ChunkLoop
+        ChunkLoop --> DispatchProgress
+    end
+
+    subgraph StorageIsolation["4. How It Stores (Storage Isolation & Sentinel)"]
+        TargetDir["Resolve Target: /storage/emulated/0/Music/ChitauriMusic/"]
+        NomediaCheck{"Verify .nomedia Sentinel"}
+        CreateSentinel["Atomically Create .nomedia Sentinel File"]
+        FlushFile["Flush Buffer to Disk (*.m4a / *.mp3)"]
+        HardwareDecoder["Extract Millisecond Duration via MediaMetadataRetriever"]
+        EmbedID3["Inject High-Res Artwork & ID3/MP4 Metadata Tags"]
+        UpdateCatalog["Append Track Record to tracks_catalog.json"]
+        ReleaseWakeLock["Release CPU PARTIAL_WAKE_LOCK & Dismiss Notification"]
+
+        DispatchProgress --> TargetDir
+        TargetDir --> NomediaCheck
+        NomediaCheck -->|"Missing"| CreateSentinel
+        NomediaCheck -->|"Exists"| FlushFile
+        CreateSentinel --> FlushFile
+        FlushFile --> HardwareDecoder
+        HardwareDecoder --> EmbedID3
+        EmbedID3 --> UpdateCatalog
+        UpdateCatalog --> ReleaseWakeLock
+    end
+
+    subgraph PlaybackExecution["5. How It Runs (Hardware Playback & DSP Offload)"]
+        PlayTrigger["User Taps Track in Offline Library / Search"]
+        QueueManager["AudioPlayerService Dual-Queue Sync<br>(original_queue vs playback_queue)"]
+        PlaybackSvc["Start ChitauriPlaybackService<br>(ForegroundServiceType.MEDIA_PLAYBACK)"]
+        MediaSession["Initialize MediaSessionCompat & Lock Screen Controls"]
+        HardwareDSP["JustAudio / ExoPlayer Output to AAudio/Oboe Hardware DSP"]
+        VinylStudio["Animate Vinyl Turntable Sheet (33 RPM & Equalizer Wave)"]
+
+        UpdateCatalog -.->|"Available for Playback"| PlayTrigger
+        PlayTrigger --> QueueManager
+        QueueManager --> PlaybackSvc
+        PlaybackSvc --> MediaSession
+        MediaSession --> HardwareDSP
+        HardwareDSP --> VinylStudio
+    end
+```
+
+### 6.1 Step 1: When Clicked (User Action & Ingress)
+1. **User Action:** Inside `youtube_search_view.dart` or `youtube_webview.dart`, the user selects an audio track by tapping the download action button or the play preview trigger.
+2. **Title Sanitization:** The raw track title is cleansed of filesystem-illegal characters (`< > : " / \ | ? * \0`) and path traversal sequences (`../`).
+3. **Collision Detection:** The application queries the local metadata catalog (`tracks_catalog.json`). If an identical track exists, an interactive conflict resolution dialog is displayed, allowing the user to skip the download or create an indexed copy (`Song (2).mp3`).
+4. **Service Dispatch:** Upon validation, Flutter calls `StorageService.startDownload(track)`.
+
+### 6.2 Step 2: Where It Goes (Platform Ingress & Channel Routing)
+1. **MethodChannel Bridge:** `StorageService` dispatches track parameters (`id`, `title`, `artist`, `thumbnailUrl`) across `MethodChannel('com.chitauri.audio/downloader')` to `MainActivity.kt`.
+2. **Android Intent Packaging:** `MainActivity.kt` instantiates an explicit Android `Intent` targeting `ChitauriDownloadService::class.java` with action `ACTION_START_DOWNLOAD`.
+3. **Foreground Promotion:** The service is started using `ContextCompat.startForegroundService()`. In compliance with Android 14+ background execution policies, the service is promoted with the `DATA_SYNC` foreground service type.
+
+### 6.3 Step 3: How Download Goes (Service Execution & Wake Lock Management)
+1. **CPU Partial Wake Lock:** To ensure downloads finish even when the device screen locks or the application enters background states, `ChitauriDownloadService` acquires an explicit CPU `PARTIAL_WAKE_LOCK` (`PowerManager.PARTIAL_WAKE_LOCK`) with the tag `Chitauri:DownloadWakeLock`.
+2. **System Notification:** A persistent foreground notification is posted to the `chitauri_downloads` channel, featuring the track title, current progress percentage, and an indeterminate buffer state.
+3. **InnerTube Extraction:** The resolver queries the YouTube InnerTube player endpoint (`youtubei/v1/player`) using an anonymous `ANDROID_MUSIC` client profile without cookies or user authentication tokens.
+4. **Signature Deciphering:** If cipher tokens are encountered (`s`, `sp`, `url`), the embedded signature evaluator calculates the `n` parameter and resolves the unthrottled GoogleVideo stream URL.
+5. **Chunked Byte Streaming:** The client initiates an HTTP range request loop, buffering the audio stream in 64 KB binary chunks.
+6. **Telemetry Streaming:** Real-time percentage metrics (0% to 100%) update the notification progress bar and stream across an `EventChannel` to the Flutter UI progress indicators.
+
+### 6.4 Step 4: How It Stores (Storage Isolation & The .nomedia Protocol)
+1. **Directory Provisioning:** Files are saved to `/storage/emulated/0/Music/ChitauriMusic/`.
+2. **The `.nomedia` Protocol Enforcement:**
+   - The system checks for the presence of the `.nomedia` zero-byte sentinel file.
+   - If absent, it is created atomically before audio bytes are written.
+   - **Crawler Suppression:** The Android OS `MediaScanner` crawler detects the `.nomedia` sentinel and excludes the directory from the global `MediaStore` content provider. Third-party music players (Spotify, VLC, Apple Music, Samsung Music) cannot see or display Chitauri tracks.
+   - **Direct File Manager Access:** Standard file managers (Google Files, Samsung My Files) navigate the physical filesystem directly, giving users full ownership to copy, share, and backup their music files.
+3. **Hardware Duration Verification:** Relying on network duration strings can lead to time-scrubber drift. Once downloaded, Android's native `MediaMetadataRetriever` parses the file container at the hardware level, extracting precise duration in milliseconds.
+4. **Metadata Tagging:** High-resolution album art is downloaded, resized, and cached; ID3v2/MP4 metadata tags (Title, Artist, Duration, Cover Art) are embedded into the file header.
+5. **Catalog Commit & Cleanup:** `tracks_catalog.json` is updated with the track record, the wake lock is released, the download notification is dismissed, and the Flutter event bus notifies the Library and Profile views.
+
+### 6.5 Step 5: How It Runs (Hardware Playback & DSP Offloading)
+1. **Playback Trigger:** Tapping any track in the Library view passes the track model to `AudioPlayerService.playTrack(track)`.
+2. **Dual-Queue Registration:** The active playlist is registered into `original_queue` and `playback_queue`.
+3. **Hardware DSP Offload:** The audio engine (`JustAudio` / `ExoPlayer`) binds to the native Android `AAudio` or `Oboe` sink, routing decoded audio directly to the device hardware Digital Signal Processor (DSP) to minimize battery drain.
+4. **Foreground Playback Service:** `ChitauriPlaybackService` starts with `ForegroundServiceType.MEDIA_PLAYBACK` and binds to `MediaSessionCompat`.
+5. **Lock Screen Controls:** The ongoing notification displays full transport controls (Play, Pause, Skip, Previous, Seekbar) and synchronizes with Bluetooth AVRCP headsets and car dashboards.
+6. **Turntable Studio Animation:** The vinyl turntable bottom sheet renders a rotating vinyl record at 33 RPM synchronized with playback state, accompanied by an animated audio wave visualizer.
+
+---
+
+## 7. Directory Layout & Source Code Mapping
 
 ```
 Chitauri/
@@ -345,7 +471,7 @@ Chitauri/
 
 ---
 
-## 7. Technology Stack Rationale
+## 8. Technology Stack Rationale
 
 ### Why Rust for the Reference Core?
 Rust provides mathematical certainty for state machine invariants. The dual-queue state machine, unbiased Fisher-Yates shuffle with pinned index, and `.nomedia` isolation tests were developed and verified with Rust unit tests (`cargo test`), ensuring zero memory corruption and data race conditions.
@@ -358,6 +484,6 @@ Mobile applications require tight integration with the Android OS lifecycle (For
 
 ---
 
-## 8. License
+## 9. License
 
 This system architecture is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.

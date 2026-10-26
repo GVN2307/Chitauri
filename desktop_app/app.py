@@ -741,7 +741,7 @@ def compute_storage_stats():
     }
 
 
-# 7. Windows Laptop Application & Shortcuts Integration
+# 7. Windows Laptop Application & Self-Installation Setup
 def ensure_windows_shortcuts():
     if os.name != "nt":
         return
@@ -754,37 +754,80 @@ def ensure_windows_shortcuts():
         else:
             return
 
+    # Standard per-user Windows application directory (standard for VS Code, Discord, Spotify)
+    app_install_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "Chitauri"
+    app_install_dir.mkdir(parents=True, exist_ok=True)
+    target_exe = app_install_dir / "chitauri.exe"
+    target_ico = app_install_dir / "logo.ico"
+
+    # 1. Locate and persist the application icon to the permanent installation directory
+    ico_source = None
+    if hasattr(sys, "_MEIPASS"):
+        for sub in [Path(sys._MEIPASS) / "logo.ico", Path(sys._MEIPASS) / "desktop_app" / "logo.ico"]:
+            if sub.exists():
+                ico_source = sub
+                break
+
+    if not ico_source:
+        for sub in [exe_path.parent / "desktop_app" / "logo.ico", exe_path.parent / "assets" / "logo.ico"]:
+            if sub.exists():
+                ico_source = sub
+                break
+
+    if ico_source and ico_source.exists():
+        try:
+            if not target_ico.exists() or target_ico.stat().st_size != ico_source.stat().st_size:
+                shutil.copy2(ico_source, target_ico)
+        except Exception:
+            pass
+
+    # 2. Self-provision binary into Programs directory if running from outside (e.g. Downloads folder)
+    final_exe = exe_path
+    if exe_path.resolve() != target_exe.resolve():
+        try:
+            shutil.copy2(exe_path, target_exe)
+            final_exe = target_exe
+        except Exception:
+            if target_exe.exists():
+                final_exe = target_exe
+            else:
+                final_exe = exe_path
+
+    # Determine icon location for shortcuts
+    if target_ico.exists():
+        icon_loc = str(target_ico)
+    elif ico_source and ico_source.exists():
+        icon_loc = str(ico_source)
+    else:
+        icon_loc = str(final_exe)
+
     desktop_lnk = Path.home() / "Desktop" / "Chitauri.lnk"
     start_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    start_dir.mkdir(parents=True, exist_ok=True)
     start_lnk = start_dir / "Chitauri.lnk"
-
-    ico_path = exe_path.parent / "desktop_app" / "logo.ico"
-    if not ico_path.exists():
-        ico_path = exe_path.parent / "assets" / "logo.ico"
-    if not ico_path.exists():
-        ico_path = exe_path
 
     ps_code = f"""
 $ws = New-Object -ComObject WScript.Shell
+
 $s1 = $ws.CreateShortcut('{desktop_lnk}')
-$s1.TargetPath = '{exe_path}'
-$s1.IconLocation = '{ico_path},0'
+$s1.TargetPath = '{final_exe}'
+$s1.IconLocation = '{icon_loc},0'
 $s1.Description = 'Chitauri Desktop Audio Suite'
-$s1.WorkingDirectory = '{exe_path.parent}'
+$s1.WorkingDirectory = '{final_exe.parent}'
 $s1.Save()
 
 $s2 = $ws.CreateShortcut('{start_lnk}')
-$s2.TargetPath = '{exe_path}'
-$s2.IconLocation = '{ico_path},0'
+$s2.TargetPath = '{final_exe}'
+$s2.IconLocation = '{icon_loc},0'
 $s2.Description = 'Chitauri Desktop Audio Suite'
-$s2.WorkingDirectory = '{exe_path.parent}'
+$s2.WorkingDirectory = '{final_exe.parent}'
 $s2.Save()
 
 try {{
     $rk = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chitauri.exe'
     if (-not (Test-Path $rk)) {{ New-Item -Path $rk -Force | Out-Null }}
-    Set-ItemProperty -Path $rk -Name '(Default)' -Value '{exe_path}'
-    Set-ItemProperty -Path $rk -Name 'Path' -Value '{exe_path.parent}'
+    Set-ItemProperty -Path $rk -Name '(Default)' -Value '{final_exe}'
+    Set-ItemProperty -Path $rk -Name 'Path' -Value '{final_exe.parent}'
 }} catch {{}}
 """
     try:
