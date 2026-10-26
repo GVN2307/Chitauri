@@ -3,31 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chitauri Audio Suite</title>
+  <title>Chitauri Desktop Audio Suite</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
           colors: {
-            surface: '#131315',
-            'surface-container': '#201f22',
-            'surface-container-high': '#2a2a2c',
-            'surface-container-lowest': '#0e0e10',
-            primary: '#4ade80',
-            'primary-dark': '#22c55e',
-            'primary-container': '#14532d',
-            'on-surface': '#f4f4f5',
-            'on-surface-variant': '#a1a1aa',
-            accent: '#10b981'
+            app: '#090a0f',
+            sidebar: '#0e1017',
+            surface: '#131620',
+            'surface-container': '#1a1d2c',
+            'surface-elevated': '#23273a',
+            borderline: '#202538',
+            primary: '#10b981',
+            'primary-light': '#34d399',
+            'primary-dark': '#059669',
+            accent: '#06b6d4',
+            'on-surface': '#f1f5f9',
+            'on-variant': '#94a3b8'
           },
           fontFamily: {
-            sans: ['Plus Jakarta Sans', 'sans-serif']
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
           }
         }
       }
@@ -39,898 +43,1216 @@
       user-select: none;
     }
     body {
-      background-color: #131315;
-      color: #f4f4f5;
+      background-color: #090a0f;
+      color: #f1f5f9;
       font-family: 'Plus Jakarta Sans', sans-serif;
-      overflow-x: hidden;
       margin: 0;
       padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
     }
     ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
     }
     ::-webkit-scrollbar-track {
-      background: #131315;
+      background: #090a0f;
     }
     ::-webkit-scrollbar-thumb {
-      background: #2a2a2c;
+      background: #1e2333;
       border-radius: 9999px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #4ade80;
+      background: #10b981;
     }
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
     }
     .material-symbols-outlined.fill {
       font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
     }
-    @keyframes spin-vinyl {
+    @keyframes spin-slow {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-    .spinning {
-      animation: spin-vinyl 14s linear infinite;
+    .vinyl-spin {
+      animation: spin-slow 16s linear infinite;
     }
-    .spinning.paused {
+    .vinyl-spin.paused {
       animation-play-state: paused;
     }
+    .tonearm {
+      transform-origin: 20px 20px;
+      transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .tonearm.playing {
+      transform: rotate(26deg);
+    }
+    .tonearm.paused {
+      transform: rotate(0deg);
+    }
     input[type=range] {
-      accent-color: #4ade80;
+      accent-color: #10b981;
+    }
+    .glass {
+      background: rgba(19, 22, 32, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .glow-primary {
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
     }
   </style>
 </head>
-<body class="flex flex-col h-screen select-none bg-surface text-on-surface">
+<body class="flex flex-col h-screen w-screen overflow-hidden bg-app text-on-surface antialiased">
 
-  <!-- TOP APP BAR -->
-  <header class="h-14 border-b border-surface-container-high bg-surface/90 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
-    <div class="flex items-center gap-2.5">
-      <div class="w-8 h-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center shadow-[0_0_12px_rgba(74,222,128,0.25)]">
-        <span class="material-symbols-outlined text-primary text-[20px] fill">graphic_eq</span>
-      </div>
+  <!-- TOP WRAPPER: SIDEBAR + MAIN CONTENT AREA -->
+  <div class="flex flex-1 overflow-hidden">
+    
+    <!-- LEFT DESKTOP SIDEBAR -->
+    <aside class="w-64 bg-sidebar border-r border-borderline flex flex-col justify-between shrink-0 z-20">
+      
+      <!-- Top Branding -->
       <div>
-        <h1 class="text-sm font-extrabold tracking-tight text-white leading-tight">Chitauri Audio</h1>
-        <p class="text-[10px] text-primary font-semibold tracking-wider uppercase">Zero-Backend • Offline Music</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button onclick="switchTab('profile')" class="px-2.5 py-1 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-white text-xs font-semibold flex items-center gap-1 transition-colors">
-        <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-        <span id="header-song-count">0 Songs</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- MAIN SCROLLABLE VIEW CONTAINER -->
-  <main class="flex-1 overflow-y-auto relative pb-28">
-
-    <!-- TAB 1: SEARCH & GRAB -->
-    <section id="tab-search" class="p-4 flex flex-col gap-4">
-      <!-- Search Input Pill -->
-      <div class="relative flex items-center bg-surface-container border border-surface-container-high rounded-2xl p-1.5 shadow-lg focus-within:border-primary/50 transition-all">
-        <span class="material-symbols-outlined text-on-surface-variant ml-3 text-[20px]">search</span>
-        <input id="search-input" type="text" placeholder="Search YouTube for songs, artists, mixes..." class="w-full bg-transparent px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none">
-        <button id="search-clear-btn" onclick="clearSearch()" class="hidden p-1.5 text-zinc-400 hover:text-white rounded-lg">
-          <span class="material-symbols-outlined text-[18px]">close</span>
-        </button>
-        <button id="search-btn" onclick="executeSearch()" class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-dark text-black font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(74,222,128,0.3)] transition-transform active:scale-95">
-          <span class="material-symbols-outlined text-[16px]">bolt</span>
-          <span>Search</span>
-        </button>
-      </div>
-
-      <!-- Quick Filter Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
-        <button onclick="chipSearch('Trending Music Hits 2026')" class="chip px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-zinc-300 whitespace-nowrap transition-colors">Trending</button>
-        <button onclick="chipSearch('Lofi Hip Hop Chill Beats')" class="chip px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-zinc-300 whitespace-nowrap transition-colors">Lofi Chill</button>
-        <button onclick="chipSearch('Synthwave Retro Electro')" class="chip px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-zinc-300 whitespace-nowrap transition-colors">Synthwave</button>
-        <button onclick="chipSearch('Top Rock Classics')" class="chip px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-zinc-300 whitespace-nowrap transition-colors">Rock</button>
-        <button onclick="chipSearch('Imagine Dragons Bones')" class="chip px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-zinc-300 whitespace-nowrap transition-colors">Imagine Dragons</button>
-      </div>
-
-      <!-- Search State Indicator -->
-      <div id="search-status" class="hidden text-xs text-on-surface-variant flex items-center justify-between px-1">
-        <span id="search-status-text">Searching YouTube...</span>
-        <span class="text-primary font-semibold">Lossless Audio Extraction</span>
-      </div>
-
-      <!-- Search Results Grid / Feed -->
-      <div id="search-results-grid" class="flex flex-col gap-2.5">
-        <!-- Initial Welcome Placeholder -->
-        <div id="search-empty-state" class="py-16 flex flex-col items-center justify-center text-center text-zinc-500 gap-3">
-          <div class="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-zinc-400">
-            <span class="material-symbols-outlined text-[32px]">travel_explore</span>
+        <div class="p-5 flex items-center gap-3 border-b border-borderline/60">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+            <span class="material-symbols-outlined text-app text-2xl fill font-black">graphic_eq</span>
           </div>
           <div>
-            <p class="text-sm font-semibold text-zinc-300">Search YouTube & Download</p>
-            <p class="text-xs text-zinc-500 mt-1 max-w-xs">Type any artist or song name above to grab high-bitrate audio directly to your offline library.</p>
+            <div class="flex items-center gap-1.5">
+              <span class="font-extrabold text-base tracking-wider text-white">CHITAURI</span>
+              <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">PRO</span>
+            </div>
+            <p class="text-[11px] text-on-variant font-medium">Desktop Audio Suite</p>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- TAB 2: MY LIBRARY -->
-    <section id="tab-library" class="p-4 flex flex-col gap-4 hidden">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-bold text-white">Offline Music Library</h2>
-          <p class="text-xs text-zinc-400">Isolated in <span class="text-primary font-mono">/Music/ChitauriMusic/</span> (.nomedia)</p>
-        </div>
-        <button onclick="refreshLibrary()" class="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-zinc-300 hover:text-white transition-colors" title="Reload Library">
-          <span class="material-symbols-outlined text-[18px]">refresh</span>
-        </button>
+        <!-- Navigation Links -->
+        <nav class="p-3 space-y-1">
+          <button id="nav-search" onclick="switchView('search')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all text-white bg-surface-container border border-primary/20 text-primary">
+            <span class="material-symbols-outlined text-[20px]">explore</span>
+            <span>Explore & Search</span>
+          </button>
+          
+          <button id="nav-library" onclick="switchView('library')" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all text-on-variant hover:text-white hover:bg-surface-container">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-[20px]">library_music</span>
+              <span>My Library</span>
+            </div>
+            <span id="sidebar-lib-count" class="px-2 py-0.5 text-[11px] rounded-full bg-surface-elevated text-on-variant font-mono">0</span>
+          </button>
+
+          <button id="nav-downloads" onclick="switchView('downloads')" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all text-on-variant hover:text-white hover:bg-surface-container">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-[20px]">download_for_offline</span>
+              <span>Downloads</span>
+            </div>
+            <span id="sidebar-dl-count" class="hidden px-2 py-0.5 text-[11px] rounded-full bg-primary/20 text-primary font-bold animate-pulse font-mono">0</span>
+          </button>
+
+          <button id="nav-vinyl" onclick="switchView('vinyl')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all text-on-variant hover:text-white hover:bg-surface-container">
+            <span class="material-symbols-outlined text-[20px]">album</span>
+            <span>Turntable Studio</span>
+          </button>
+
+          <button id="nav-storage" onclick="switchView('storage')" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all text-on-variant hover:text-white hover:bg-surface-container">
+            <span class="material-symbols-outlined text-[20px]">security</span>
+            <span>Storage & Security</span>
+          </button>
+        </nav>
       </div>
 
-      <!-- Library Track List -->
-      <div id="library-list" class="flex flex-col gap-2">
-        <div id="library-empty-state" class="py-16 flex flex-col items-center justify-center text-center text-zinc-500 gap-3">
-          <div class="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center text-zinc-400">
-            <span class="material-symbols-outlined text-[32px]">library_music</span>
+      <!-- Bottom Sidebar Storage Card -->
+      <div class="p-3 border-t border-borderline/60">
+        <div class="p-3.5 rounded-2xl bg-surface border border-borderline space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-white">
+              <span class="material-symbols-outlined text-primary text-sm">hard_drive</span>
+              <span>Offline Vault</span>
+            </div>
+            <span class="text-[10px] font-bold text-primary px-1.5 py-0.2 rounded bg-primary/10">.nomedia</span>
           </div>
+
+          <div class="text-[11px] text-on-variant flex justify-between">
+            <span id="sidebar-tracks-text">0 Tracks</span>
+            <span id="sidebar-size-text" class="font-mono text-white">0.0 MB</span>
+          </div>
+
+          <div class="w-full bg-surface-elevated h-1.5 rounded-full overflow-hidden">
+            <div id="storage-bar" class="bg-gradient-to-r from-primary to-accent h-full w-[12%] rounded-full"></div>
+          </div>
+
+          <button onclick="openStorageFolder()" class="w-full mt-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-surface-elevated hover:bg-borderline text-[11px] font-semibold text-on-variant hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-[14px]">folder_open</span>
+            <span>Open in Explorer</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN RIGHT VIEWPORT -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-app">
+      
+      <!-- TOP DESKTOP HEADER BAR -->
+      <header class="h-16 px-6 border-b border-borderline flex items-center justify-between gap-4 shrink-0 glass z-10">
+        
+        <!-- Search Input Bar -->
+        <div class="flex-1 max-w-2xl relative">
+          <div class="relative flex items-center">
+            <span class="material-symbols-outlined absolute left-3.5 text-on-variant text-xl pointer-events-none">search</span>
+            <input 
+              id="desktop-search-input" 
+              type="text" 
+              placeholder="Search songs, artists, playlists, or paste YouTube link..." 
+              class="w-full pl-10 pr-28 py-2 bg-surface border border-borderline rounded-xl text-sm text-white placeholder-on-variant/60 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/60 transition-all"
+              onkeydown="if(event.key==='Enter') executeSearch()"
+            >
+            <div class="absolute right-1.5 flex items-center gap-1">
+              <button onclick="clearSearch()" class="p-1 rounded-lg hover:bg-surface-elevated text-on-variant hover:text-white text-xs">
+                <span class="material-symbols-outlined text-base">close</span>
+              </button>
+              <button onclick="executeSearch()" class="px-3 py-1 rounded-lg bg-primary hover:bg-primary-light text-app font-bold text-xs flex items-center gap-1 shadow-sm transition-all">
+                <span>Find</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Header Utilities -->
+        <div class="flex items-center gap-3">
+          <!-- Quick Screenshot Capture Action -->
+          <button onclick="captureCurrentDesktopScreen()" title="Capture High-Res Screenshot" class="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-container border border-borderline text-xs font-semibold text-on-variant hover:text-white flex items-center gap-1.5 transition-colors">
+            <span class="material-symbols-outlined text-[16px] text-accent">photo_camera</span>
+            <span>Screenshot</span>
+          </button>
+
+          <!-- Engine Status Pill -->
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface border border-borderline">
+            <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+            <span class="text-xs font-semibold text-white">Client Engine Active</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- SCROLLABLE CONTENT CANVAS -->
+      <div class="flex-1 overflow-y-auto px-6 py-5 relative" id="main-content-scroll">
+        
+        <!-- VIEW 1: SEARCH & EXPLORE -->
+        <section id="view-search" class="space-y-6">
+          
+          <!-- Category Quick Filters -->
+          <div class="flex items-center gap-2 overflow-x-auto pb-1" id="genre-pills">
+            <button onclick="quickFilter('')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-app shadow-sm">All</button>
+            <button onclick="quickFilter('Imagine Dragons')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline">Imagine Dragons</button>
+            <button onclick="quickFilter('Alan Walker')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline">Alan Walker</button>
+            <button onclick="quickFilter('Synthwave Chill')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline">Synthwave Chill</button>
+            <button onclick="quickFilter('Lofi Hip Hop')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline">Lofi Hip Hop</button>
+            <button onclick="quickFilter('Top Hits 2026')" class="genre-pill px-3 py-1.5 rounded-lg text-xs font-bold bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline">Top Hits</button>
+          </div>
+
+          <!-- Section Banner -->
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 id="search-results-heading" class="text-lg font-bold text-white tracking-tight">Trending YouTube Tracks</h2>
+              <p class="text-xs text-on-variant">Stream instantly or download to local 320kbps MP3 offline vault</p>
+            </div>
+            <div id="search-spinner" class="hidden flex items-center gap-2 text-xs text-primary font-semibold">
+              <span class="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+              <span>Resolving streams...</span>
+            </div>
+          </div>
+
+          <!-- Search Results Cards Grid -->
+          <div id="search-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <!-- VIEW 2: OFFLINE LIBRARY -->
+        <section id="view-library" class="hidden space-y-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-surface to-surface-container border border-borderline">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shadow-inner">
+                <span class="material-symbols-outlined text-3xl fill">library_music</span>
+              </div>
+              <div>
+                <h2 class="text-xl font-extrabold text-white">Offline Music Vault</h2>
+                <p class="text-xs text-on-variant mt-0.5">Isolated with <span class="text-primary font-mono font-bold">.nomedia</span> • Zero cloud dependency</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2.5">
+              <button onclick="playAllLibrary(false)" class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-light text-app font-bold text-xs flex items-center gap-2 shadow-lg shadow-primary/20 transition-all">
+                <span class="material-symbols-outlined text-base fill">play_arrow</span>
+                <span>Play All</span>
+              </button>
+              <button onclick="playAllLibrary(true)" class="px-4 py-2 rounded-xl bg-surface-elevated hover:bg-borderline text-white font-bold text-xs flex items-center gap-2 border border-borderline transition-all">
+                <span class="material-symbols-outlined text-base">shuffle</span>
+                <span>Shuffle</span>
+              </button>
+              <button onclick="refreshLibrary()" title="Rescan files" class="p-2 rounded-xl bg-surface-elevated hover:bg-borderline text-on-variant hover:text-white border border-borderline transition-all">
+                <span class="material-symbols-outlined text-base">refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Library Filter Input -->
+          <div class="flex items-center justify-between gap-4">
+            <div class="relative w-72">
+              <span class="material-symbols-outlined absolute left-3 top-2.5 text-on-variant text-sm">filter_list</span>
+              <input 
+                id="library-filter-input" 
+                type="text" 
+                placeholder="Filter offline tracks..." 
+                class="w-full pl-9 pr-3 py-1.5 bg-surface border border-borderline rounded-xl text-xs text-white placeholder-on-variant focus:outline-none focus:border-primary/50"
+                oninput="filterLibrary(this.value)"
+              >
+            </div>
+            <div class="text-xs text-on-variant">
+              Total: <span id="library-total-count" class="font-bold text-white">0 tracks</span> (<span id="library-total-size" class="font-mono text-primary">0 MB</span>)
+            </div>
+          </div>
+
+          <!-- Library Table -->
+          <div class="overflow-x-auto rounded-2xl border border-borderline bg-surface/50">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-borderline text-on-variant uppercase text-[10px] tracking-wider bg-surface">
+                  <th class="py-3 px-4 w-12 text-center">#</th>
+                  <th class="py-3 px-4">Title & Artist</th>
+                  <th class="py-3 px-4 w-28">Duration</th>
+                  <th class="py-3 px-4 w-24">Size</th>
+                  <th class="py-3 px-4 w-32">Format</th>
+                  <th class="py-3 px-4 w-28 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="library-table-body" class="divide-y divide-borderline/40">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 3: ACTIVE DOWNLOADS -->
+        <section id="view-downloads" class="hidden space-y-6">
           <div>
-            <p class="text-sm font-semibold text-zinc-300">Your Library is Empty</p>
-            <p class="text-xs text-zinc-500 mt-1 max-w-xs">Search for songs in the Search tab to download audio for offline listening.</p>
+            <h2 class="text-xl font-bold text-white">Active Download Queue</h2>
+            <p class="text-xs text-on-variant">Direct YouTube InnerTube stream extraction with automated MP3 metadata tagging</p>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- TAB 3: PROFILE & STORAGE -->
-    <section id="tab-profile" class="p-4 flex flex-col gap-5 hidden">
-      <div>
-        <h2 class="text-lg font-bold text-white">Device & Storage Profile</h2>
-        <p class="text-xs text-zinc-400">Local Media Isolation Telemetry</p>
-      </div>
+          <div id="downloads-container" class="space-y-3">
+            <!-- Dynamically populated -->
+            <div class="p-8 text-center rounded-2xl border border-borderline bg-surface/30">
+              <span class="material-symbols-outlined text-4xl text-on-variant/40 mb-2">download_done</span>
+              <p class="text-sm font-semibold text-white">No Active Downloads</p>
+              <p class="text-xs text-on-variant mt-1">Search any song on the Explore tab and click "Download MP3" to queue tracks.</p>
+            </div>
+          </div>
+        </section>
 
-      <!-- Storage Metrics Cards -->
-      <div class="grid grid-cols-2 gap-3">
-        <div class="p-4 rounded-2xl bg-surface-container border border-surface-container-high flex flex-col gap-1">
-          <span class="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Tracks Stored</span>
-          <span id="profile-tracks-count" class="text-2xl font-extrabold text-white">0</span>
-          <span class="text-[11px] text-primary flex items-center gap-1 mt-1">
-            <span class="material-symbols-outlined text-[14px]">check_circle</span>
-            Available Offline
-          </span>
-        </div>
-        <div class="p-4 rounded-2xl bg-surface-container border border-surface-container-high flex flex-col gap-1">
-          <span class="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Storage Saved</span>
-          <span id="profile-storage-size" class="text-2xl font-extrabold text-white">0.0 MB</span>
-          <span class="text-[11px] text-primary flex items-center gap-1 mt-1">
-            <span class="material-symbols-outlined text-[14px]">speed</span>
-            Lossless MP3
-          </span>
-        </div>
-      </div>
+        <!-- VIEW 4: VINYL TURNTABLE STUDIO -->
+        <section id="view-vinyl" class="hidden h-full flex flex-col items-center justify-center p-6 space-y-6">
+          <div class="w-full max-w-4xl p-8 rounded-3xl bg-gradient-to-b from-surface to-surface-container border border-borderline shadow-2xl flex flex-col lg:flex-row items-center gap-10">
+            
+            <!-- Vinyl Turntable Base -->
+            <div class="relative w-72 h-72 sm:w-80 sm:h-80 rounded-3xl bg-[#11131a] border-4 border-[#1e2230] p-4 flex items-center justify-center shadow-2xl">
+              
+              <!-- Tonearm -->
+              <div class="tonearm paused absolute top-4 right-4 z-20 pointer-events-none" id="vinyl-tonearm">
+                <svg width="60" height="140" viewBox="0 0 60 140" fill="none">
+                  <circle cx="20" cy="20" r="16" fill="#2d3245" stroke="#4a5270" stroke-width="2"/>
+                  <circle cx="20" cy="20" r="8" fill="#10b981"/>
+                  <path d="M20 20 L35 90 L28 120" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+                  <rect x="20" y="115" width="16" height="22" rx="3" fill="#334155" stroke="#10b981" stroke-width="1.5"/>
+                </svg>
+              </div>
 
-      <!-- Storage Details Card -->
-      <div class="p-4 rounded-2xl bg-surface-container border border-surface-container-high flex flex-col gap-3">
-        <div class="flex items-center gap-2 text-sm font-bold text-white">
-          <span class="material-symbols-outlined text-primary text-[20px]">folder_shield</span>
-          <span>Storage Isolation Engine</span>
-        </div>
-        <p class="text-xs text-zinc-400 leading-relaxed">
-          The <span class="text-white font-mono">.nomedia</span> protocol is actively enforced inside your music directory. Media scanners from third-party players cannot crawl or leak your tracks, while Windows File Explorer maintains full access.
-        </p>
-        <div class="p-2.5 rounded-xl bg-surface-container-lowest font-mono text-[11px] text-zinc-300 break-all select-all" id="profile-storage-path">
-          Loading directory...
-        </div>
-        <button onclick="openFolder()" class="w-full py-2.5 rounded-xl bg-surface-container-high hover:bg-zinc-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors">
-          <span class="material-symbols-outlined text-[18px]">drive_file_move</span>
-          <span>Open Music Folder in File Explorer</span>
-        </button>
-      </div>
+              <!-- Spinning Disc -->
+              <div id="turntable-disc" class="vinyl-spin paused relative w-full h-full rounded-full bg-gradient-to-tr from-[#0a0a0c] via-[#1a1c24] to-[#0a0a0c] border-4 border-[#25293a] flex items-center justify-center shadow-inner overflow-hidden">
+                <!-- Grooves -->
+                <div class="absolute inset-2 rounded-full border border-white/5 pointer-events-none"></div>
+                <div class="absolute inset-6 rounded-full border border-white/5 pointer-events-none"></div>
+                <div class="absolute inset-10 rounded-full border border-white/5 pointer-events-none"></div>
+                <div class="absolute inset-14 rounded-full border border-white/5 pointer-events-none"></div>
+                <div class="absolute inset-20 rounded-full border border-white/10 pointer-events-none"></div>
 
-      <!-- Danger Zone / Clean -->
-      <div class="p-4 rounded-2xl bg-surface-container border border-surface-container-high flex flex-col gap-2">
-        <span class="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Storage Maintenance</span>
-        <button onclick="clearCache()" class="w-full py-2.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors">
-          <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
-          <span>Clear Temporary Search Cache</span>
-        </button>
-      </div>
-    </section>
+                <!-- Center Label Artwork -->
+                <div class="w-28 h-28 rounded-full overflow-hidden border-2 border-white/20 relative shadow-lg flex items-center justify-center bg-surface">
+                  <img id="vinyl-center-art" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&h=200&fit=crop" class="w-full h-full object-cover">
+                  <!-- Spindle hole -->
+                  <div class="absolute w-5 h-5 rounded-full bg-app border-2 border-primary"></div>
+                </div>
+              </div>
+            </div>
 
-  </main>
+            <!-- Turntable Details & Spectrum -->
+            <div class="flex-1 space-y-5 text-center lg:text-left">
+              <div>
+                <span class="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">Direct Fidelity Playback</span>
+                <h3 id="vinyl-track-title" class="text-2xl font-black text-white mt-2 leading-tight">No Track Playing</h3>
+                <p id="vinyl-track-artist" class="text-sm font-semibold text-primary mt-1">Select a song to start turntable</p>
+              </div>
 
-  <!-- LIVE ACTIVE DOWNLOAD DRAWER (FLOATING) -->
-  <div id="download-drawer" class="hidden fixed bottom-16 left-0 right-0 z-40 px-3 pb-1">
-    <div class="p-3 rounded-2xl bg-surface-container-high/95 backdrop-blur-md border border-primary/40 shadow-2xl flex flex-col gap-2">
-      <div class="flex items-center justify-between text-xs">
-        <div class="flex items-center gap-2 truncate max-w-[70%]">
-          <span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping"></span>
-          <span id="download-drawer-title" class="font-bold text-white truncate">Downloading song...</span>
-        </div>
-        <span id="download-drawer-percent" class="font-mono text-primary font-bold">0%</span>
+              <!-- Audio Spectrum Visualizer Canvas -->
+              <div class="w-full h-24 bg-app/80 rounded-2xl border border-borderline p-2 flex items-end justify-center overflow-hidden">
+                <canvas id="spectrum-canvas" width="400" height="80" class="w-full h-full"></canvas>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 text-xs text-on-variant">
+                <div class="px-2.5 py-1 rounded-lg bg-surface border border-borderline font-mono text-white">
+                  320 kbps MP3
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-surface border border-borderline font-mono text-white">
+                  48.0 kHz • Stereo
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-surface border border-borderline font-mono text-primary">
+                  .nomedia Verified
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- VIEW 5: STORAGE & SECURITY -->
+        <section id="view-storage" class="hidden space-y-6 max-w-4xl">
+          <div>
+            <h2 class="text-xl font-bold text-white">Storage Vault & Isolation Architecture</h2>
+            <p class="text-xs text-on-variant">Local-first privacy architecture with Windows indexer isolation</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-5 rounded-2xl bg-surface border border-borderline space-y-1">
+              <span class="material-symbols-outlined text-primary text-2xl">verified_user</span>
+              <p class="text-xs text-on-variant">Isolation Status</p>
+              <h4 class="text-base font-extrabold text-white">.nomedia Active</h4>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-surface border border-borderline space-y-1">
+              <span class="material-symbols-outlined text-accent text-2xl">folder_zip</span>
+              <p class="text-xs text-on-variant">Vault Size</p>
+              <h4 id="vault-size-badge" class="text-base font-extrabold text-white">0.0 MB</h4>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-surface border border-borderline space-y-1">
+              <span class="material-symbols-outlined text-primary-light text-2xl">music_note</span>
+              <p class="text-xs text-on-variant">Total Offline Tracks</p>
+              <h4 id="vault-tracks-badge" class="text-base font-extrabold text-white">0 Tracks</h4>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-surface border border-borderline space-y-4">
+            <h3 class="text-sm font-bold text-white">Filesystem Isolation Protocol</h3>
+            <p class="text-xs text-on-variant leading-relaxed">
+              Chitauri places a zero-byte <code class="px-1.5 py-0.5 rounded bg-surface-elevated font-mono text-primary">.nomedia</code> sentinel in your local audio directory. 
+              This prevents Windows Media Player, Groove, Google Drive sync, and Android MediaScanner from automatically harvesting and polluting your system media library, while preserving 100% direct file access for you via Windows Explorer.
+            </p>
+
+            <div class="p-3 rounded-xl bg-app border border-borderline flex items-center justify-between">
+              <span id="storage-dir-path" class="text-xs font-mono text-on-variant truncate">C:\Users\...\Music\ChitauriMusic</span>
+              <button onclick="openStorageFolder()" class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-light text-app font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors">
+                <span class="material-symbols-outlined text-sm">open_in_new</span>
+                <span>Open Folder</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
       </div>
-      <div class="w-full h-1.5 bg-surface-container-lowest rounded-full overflow-hidden">
-        <div id="download-drawer-bar" class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
-      </div>
-    </div>
+    </main>
   </div>
 
-  <!-- STICKY BOTTOM MINI-PLAYER -->
-  <div id="mini-player" class="hidden fixed bottom-14 left-0 right-0 h-16 bg-surface-container-high/95 backdrop-blur-md border-t border-surface-container px-4 flex items-center justify-between z-30 shadow-2xl cursor-pointer" onclick="openVinylPlayer()">
-    <div class="flex items-center gap-3 truncate max-w-[65%]">
-      <div class="relative w-10 h-10 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 shadow-md">
-        <img id="mini-artwork" src="" class="w-full h-full object-cover">
-        <div class="absolute inset-0 bg-black/10"></div>
-      </div>
-      <div class="truncate">
-        <h4 id="mini-title" class="text-xs font-bold text-white truncate">Song Title</h4>
-        <p id="mini-artist" class="text-[10px] text-zinc-400 truncate">Artist</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
-      <button onclick="prevTrack()" class="p-1.5 text-zinc-400 hover:text-white rounded-full transition-colors">
-        <span class="material-symbols-outlined text-[20px]">skip_previous</span>
-      </button>
-      <button onclick="togglePlay()" class="w-9 h-9 rounded-full bg-primary hover:bg-primary-dark text-black flex items-center justify-center transition-transform active:scale-95 shadow-[0_0_12px_rgba(74,222,128,0.3)]">
-        <span id="mini-play-icon" class="material-symbols-outlined text-[20px] fill">play_arrow</span>
-      </button>
-      <button onclick="nextTrack()" class="p-1.5 text-zinc-400 hover:text-white rounded-full transition-colors">
-        <span class="material-symbols-outlined text-[20px]">skip_next</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- BOTTOM NAVIGATION BAR -->
-  <nav class="fixed bottom-0 left-0 right-0 h-14 bg-surface border-t border-surface-container-high px-6 flex items-center justify-around z-30">
-    <button id="nav-btn-search" onclick="switchTab('search')" class="flex flex-col items-center gap-0.5 text-primary transition-colors">
-      <span class="material-symbols-outlined text-[22px] fill">search</span>
-      <span class="text-[10px] font-bold">Search</span>
-    </button>
-    <button id="nav-btn-library" onclick="switchTab('library')" class="flex flex-col items-center gap-0.5 text-zinc-400 hover:text-white transition-colors">
-      <span class="material-symbols-outlined text-[22px]">library_music</span>
-      <span class="text-[10px] font-bold">Library</span>
-    </button>
-    <button id="nav-btn-profile" onclick="switchTab('profile')" class="flex flex-col items-center gap-0.5 text-zinc-400 hover:text-white transition-colors">
-      <span class="material-symbols-outlined text-[22px]">person</span>
-      <span class="text-[10px] font-bold">Profile</span>
-    </button>
-  </nav>
-
-  <!-- EXPANDABLE FULLSCREEN VINYL TURNTABLE PLAYER SHEET -->
-  <div id="vinyl-sheet" class="hidden fixed inset-0 z-50 bg-surface/98 backdrop-blur-2xl flex flex-col justify-between p-5 select-none transition-all duration-300">
-    <!-- Header Sub-bar -->
-    <div class="flex items-center justify-between">
-      <button onclick="closeVinylPlayer()" class="p-2 text-zinc-400 hover:text-white rounded-full transition-colors">
-        <span class="material-symbols-outlined text-[26px]">keyboard_arrow_down</span>
-      </button>
-      <div class="flex flex-col items-center">
-        <span class="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Playing From Isolated Storage</span>
-        <span class="text-[11px] font-bold text-primary flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-          Pulse Hardware Engine
-        </span>
-      </div>
-      <button onclick="deleteCurrentSong()" class="p-2 text-zinc-400 hover:text-red-400 rounded-full transition-colors" title="Delete Track">
-        <span class="material-symbols-outlined text-[22px]">delete</span>
-      </button>
-    </div>
-
-    <!-- Vinyl Turntable Graphic Hero -->
-    <div class="relative w-full max-w-[320px] aspect-square mx-auto flex items-center justify-center my-auto">
-      <!-- Mint Ambient Backlight Glow -->
-      <div class="absolute inset-4 rounded-full bg-primary/20 blur-3xl transform scale-110 pointer-events-none"></div>
-
-      <!-- Outer Vinyl Record Disc -->
-      <div id="vinyl-disc" class="relative w-64 h-64 rounded-full bg-gradient-to-tr from-black via-zinc-900 to-black p-2 shadow-2xl border-4 border-zinc-800 flex items-center justify-center spinning paused">
-        <!-- Vinyl Grooves Rings -->
-        <div class="absolute inset-2 rounded-full border border-zinc-800/60 pointer-events-none"></div>
-        <div class="absolute inset-6 rounded-full border border-zinc-800/40 pointer-events-none"></div>
-        <div class="absolute inset-10 rounded-full border border-zinc-800/50 pointer-events-none"></div>
-        <div class="absolute inset-14 rounded-full border border-zinc-800/30 pointer-events-none"></div>
-
-        <!-- Center Album Art Sticker -->
-        <div class="relative w-24 h-24 rounded-full overflow-hidden border-4 border-zinc-900 shadow-inner flex items-center justify-center bg-zinc-800">
-          <img id="vinyl-artwork" src="" class="w-full h-full object-cover">
-          <div class="absolute w-4 h-4 rounded-full bg-zinc-950 border border-zinc-700"></div>
+  <!-- PERSISTENT BOTTOM PLAYER BAR (88px tall) -->
+  <footer class="h-20 bg-sidebar/95 backdrop-blur-md border-t border-borderline px-6 flex items-center justify-between gap-6 z-30 shrink-0">
+    
+    <!-- Left: Song Artwork & Metadata (260px) -->
+    <div class="w-64 flex items-center gap-3">
+      <div class="relative w-12 h-12 rounded-xl bg-surface-elevated border border-borderline overflow-hidden shrink-0 shadow-md">
+        <img id="player-art" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop" class="w-full h-full object-cover">
+        <div id="player-art-spinner" class="hidden absolute inset-0 bg-app/80 flex items-center justify-center">
+          <span class="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
         </div>
       </div>
-    </div>
-
-    <!-- Metadata & Controls Block -->
-    <div class="flex flex-col gap-5 w-full max-w-sm mx-auto">
-      <!-- Title & Artist -->
-      <div class="text-center">
-        <h2 id="vinyl-title" class="text-base font-bold text-white truncate max-w-[280px] mx-auto">Song Title</h2>
-        <p id="vinyl-artist" class="text-xs text-zinc-400 truncate max-w-[240px] mx-auto mt-0.5">Artist Name</p>
+      <div class="overflow-hidden">
+        <h4 id="player-title" class="text-xs font-extrabold text-white truncate">Chitauri Audio Suite</h4>
+        <p id="player-artist" class="text-[11px] text-on-variant truncate mt-0.5">Select a track to play</p>
       </div>
-
-      <!-- Scrubber Slider -->
-      <div class="flex flex-col gap-1">
-        <input id="scrubber" type="range" min="0" max="100" value="0" step="0.1" oninput="onSeekInput(this.value)" onchange="onSeekChange(this.value)" class="w-full h-1.5 bg-surface-container-high rounded-lg cursor-pointer">
-        <div class="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-          <span id="time-current">0:00</span>
-          <span id="time-total">0:00</span>
-        </div>
-      </div>
-
-      <!-- Transport Controls -->
-      <div class="flex items-center justify-between px-2">
-        <!-- Shuffle -->
-        <button id="btn-shuffle" onclick="toggleShuffle()" class="p-2 text-zinc-500 hover:text-white transition-colors" title="Shuffle">
-          <span class="material-symbols-outlined text-[22px]">shuffle</span>
-        </button>
-        <!-- Prev -->
-        <button onclick="prevTrack()" class="p-2 text-zinc-300 hover:text-white transition-colors">
-          <span class="material-symbols-outlined text-[28px]">skip_previous</span>
-        </button>
-        <!-- Play / Pause -->
-        <button onclick="togglePlay()" class="w-14 h-14 rounded-full bg-primary hover:bg-primary-dark text-black flex items-center justify-center shadow-[0_0_20px_rgba(74,222,128,0.4)] transition-transform active:scale-95">
-          <span id="vinyl-play-icon" class="material-symbols-outlined text-[32px] fill">play_arrow</span>
-        </button>
-        <!-- Next -->
-        <button onclick="nextTrack()" class="p-2 text-zinc-300 hover:text-white transition-colors">
-          <span class="material-symbols-outlined text-[28px]">skip_next</span>
-        </button>
-        <!-- Repeat -->
-        <button id="btn-repeat" onclick="toggleRepeat()" class="p-2 text-zinc-500 hover:text-white transition-colors" title="Repeat">
-          <span id="repeat-icon" class="material-symbols-outlined text-[22px]">repeat</span>
-        </button>
-      </div>
-
-      <!-- Volume Bar -->
-      <div class="flex items-center gap-2 px-4 py-1 text-zinc-400">
-        <span class="material-symbols-outlined text-[16px]">volume_down</span>
-        <input id="volume-slider" type="range" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)" class="w-full h-1 bg-surface-container-high rounded-lg cursor-pointer">
-        <span class="material-symbols-outlined text-[16px]">volume_up</span>
+      <div id="playing-bars" class="hidden flex items-end gap-0.5 h-3">
+        <span class="w-0.5 h-3 bg-primary animate-pulse"></span>
+        <span class="w-0.5 h-2 bg-primary animate-bounce"></span>
+        <span class="w-0.5 h-2.5 bg-primary animate-pulse"></span>
       </div>
     </div>
-  </div>
 
-  <!-- DUPLICATE MODAL DIALOG -->
-  <div id="duplicate-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-xs p-5 rounded-3xl bg-surface-container border border-surface-container-high shadow-2xl flex flex-col gap-4 text-center">
-      <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
-        <span class="material-symbols-outlined text-[26px]">content_copy</span>
+    <!-- Center: Playback Controls & Time Scrubber (max-w-2xl) -->
+    <div class="flex-1 max-w-xl flex flex-col items-center gap-1.5">
+      
+      <!-- Button Controls -->
+      <div class="flex items-center gap-5">
+        <button id="btn-shuffle" onclick="toggleShuffle()" title="Shuffle" class="p-1 rounded-lg text-on-variant hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-lg">shuffle</span>
+        </button>
+
+        <button onclick="playPrevTrack()" title="Previous Track" class="p-1 rounded-lg text-on-variant hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-2xl fill">skip_previous</span>
+        </button>
+
+        <!-- Big Play/Pause Glowing Button -->
+        <button id="btn-play-pause" onclick="togglePlayPause()" class="w-10 h-10 rounded-full bg-primary hover:bg-primary-light text-app flex items-center justify-center shadow-lg shadow-primary/30 transition-transform active:scale-95">
+          <span id="btn-play-icon" class="material-symbols-outlined text-2xl fill">play_arrow</span>
+        </button>
+
+        <button onclick="playNextTrack()" title="Next Track" class="p-1 rounded-lg text-on-variant hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-2xl fill">skip_next</span>
+        </button>
+
+        <button id="btn-repeat" onclick="toggleRepeat()" title="Repeat (Off / All / One)" class="p-1 rounded-lg text-on-variant hover:text-white transition-colors">
+          <span id="icon-repeat" class="material-symbols-outlined text-lg">repeat</span>
+        </button>
       </div>
-      <div>
-        <h3 class="text-sm font-bold text-white">Song Already Downloaded</h3>
-        <p id="duplicate-modal-text" class="text-xs text-zinc-400 mt-1">This song is already in your offline library. Would you like to download it again as an indexed duplicate?</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button onclick="closeDuplicateModal()" class="flex-1 py-2.5 rounded-xl bg-surface-container-high hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition-colors">Cancel</button>
-        <button onclick="confirmDuplicateDownload()" class="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-black text-xs font-bold transition-colors">Download Again</button>
+
+      <!-- Scrubber Row -->
+      <div class="w-full flex items-center gap-2.5 text-[11px] font-mono text-on-variant">
+        <span id="player-current-time">0:00</span>
+        <input 
+          id="player-seek" 
+          type="range" 
+          min="0" 
+          max="100" 
+          value="0" 
+          step="0.1" 
+          class="w-full h-1 bg-surface-elevated rounded-lg appearance-none cursor-pointer"
+          oninput="onUserSeek(this.value)"
+        >
+        <span id="player-duration">0:00</span>
       </div>
     </div>
-  </div>
 
-  <!-- NATIVE AUDIO ELEMENT -->
-  <audio id="audio-engine" preload="auto"></audio>
+    <!-- Right: Volume & Turntable Toggle (220px) -->
+    <div class="w-56 flex items-center justify-end gap-3">
+      <button onclick="toggleMute()" class="p-1 text-on-variant hover:text-white transition-colors">
+        <span id="icon-volume" class="material-symbols-outlined text-xl">volume_up</span>
+      </button>
 
-  <!-- CLIENT-SIDE APPLICATION CONTROLLER -->
+      <input 
+        id="player-volume" 
+        type="range" 
+        min="0" 
+        max="1" 
+        step="0.01" 
+        value="0.85" 
+        class="w-20 h-1 bg-surface-elevated rounded-lg appearance-none cursor-pointer"
+        oninput="setVolume(this.value)"
+      >
+
+      <button onclick="switchView('vinyl')" title="Expand Vinyl Turntable" class="p-1.5 rounded-lg bg-surface hover:bg-surface-elevated text-on-variant hover:text-white border border-borderline transition-colors">
+        <span class="material-symbols-outlined text-base">album</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Native HTML5 Audio Element -->
+  <audio id="global-audio" preload="metadata"></audio>
+
+  <!-- JAVASCRIPT APPLICATION CORE -->
   <script>
-    // State variables
-    let currentTab = 'search';
+    // App State
+    let currentView = 'search';
+    let searchResults = [];
     let library = [];
+    let currentTrack = null;
     let playbackQueue = [];
     let originalQueue = [];
-    let currentIndex = -1;
-    let isPlaying = false;
+    let queueIndex = -1;
     let isShuffle = false;
-    let repeatMode = 'off'; // 'off' | 'all' | 'one'
-    let pendingDuplicateTrack = null;
-    let isSeeking = false;
+    let repeatState = 0; // 0 = Off, 1 = Repeat All, 2 = Repeat One
+    let isUserSeeking = false;
+    let downloadPollTimer = null;
 
-    const audio = document.getElementById('audio-engine');
+    // Web Audio API Analyzer for Turntable Spectrum
+    let audioCtx = null;
+    let analyser = null;
+    let audioSource = null;
 
-    // DOM Elements
-    const searchInput = document.getElementById('search-input');
-    const searchBtn = document.getElementById('search-btn');
-    const searchClearBtn = document.getElementById('search-clear-btn');
-    const searchStatus = document.getElementById('search-status');
-    const searchStatusText = document.getElementById('search-status-text');
-    const searchResultsGrid = document.getElementById('search-results-grid');
-    const searchEmptyState = document.getElementById('search-empty-state');
+    const audioEl = document.getElementById('global-audio');
 
-    const libraryList = document.getElementById('library-list');
-    const libraryEmptyState = document.getElementById('library-empty-state');
-
-    const downloadDrawer = document.getElementById('download-drawer');
-    const downloadDrawerTitle = document.getElementById('download-drawer-title');
-    const downloadDrawerPercent = document.getElementById('download-drawer-percent');
-    const downloadDrawerBar = document.getElementById('download-drawer-bar');
-
-    const miniPlayer = document.getElementById('mini-player');
-    const miniArtwork = document.getElementById('mini-artwork');
-    const miniTitle = document.getElementById('mini-title');
-    const miniArtist = document.getElementById('mini-artist');
-    const miniPlayIcon = document.getElementById('mini-play-icon');
-
-    const vinylSheet = document.getElementById('vinyl-sheet');
-    const vinylDisc = document.getElementById('vinyl-disc');
-    const vinylArtwork = document.getElementById('vinyl-artwork');
-    const vinylTitle = document.getElementById('vinyl-title');
-    const vinylArtist = document.getElementById('vinyl-artist');
-    const vinylPlayIcon = document.getElementById('vinyl-play-icon');
-
-    const scrubber = document.getElementById('scrubber');
-    const timeCurrent = document.getElementById('time-current');
-    const timeTotal = document.getElementById('time-total');
-    const btnShuffle = document.getElementById('btn-shuffle');
-    const btnRepeat = document.getElementById('btn-repeat');
-    const repeatIcon = document.getElementById('repeat-icon');
-
-    // Audio Engine Event Listeners
-    audio.addEventListener('timeupdate', () => {
-      if (!isSeeking && audio.duration) {
-        const percent = (audio.currentTime / audio.duration) * 100;
-        scrubber.value = percent;
-        timeCurrent.textContent = formatTime(audio.currentTime);
-        timeTotal.textContent = formatTime(audio.duration);
-      }
+    // Initialize application
+    window.addEventListener('DOMContentLoaded', async () => {
+      setupAudioListeners();
+      await refreshLibrary();
+      await refreshStorageStats();
+      executeSearch('Imagine Dragons Bones');
+      startDownloadPolling();
+      initSpectrumCanvas();
     });
 
-    audio.addEventListener('play', () => {
-      isPlaying = true;
-      updatePlayIcons(true);
-      vinylDisc.classList.remove('paused');
-    });
-
-    audio.addEventListener('pause', () => {
-      isPlaying = false;
-      updatePlayIcons(false);
-      vinylDisc.classList.add('paused');
-    });
-
-    audio.addEventListener('ended', () => {
-      if (repeatMode === 'one') {
-        audio.currentTime = 0;
-        audio.play();
-      } else {
-        nextTrack();
-      }
-    });
-
-    // Tab Navigation
-    function switchTab(tab) {
-      currentTab = tab;
-      document.getElementById('tab-search').classList.toggle('hidden', tab !== 'search');
-      document.getElementById('tab-library').classList.toggle('hidden', tab !== 'library');
-      document.getElementById('tab-profile').classList.toggle('hidden', tab !== 'profile');
-
-      document.getElementById('nav-btn-search').className = tab === 'search' ? 'flex flex-col items-center gap-0.5 text-primary' : 'flex flex-col items-center gap-0.5 text-zinc-400 hover:text-white';
-      document.getElementById('nav-btn-library').className = tab === 'library' ? 'flex flex-col items-center gap-0.5 text-primary' : 'flex flex-col items-center gap-0.5 text-zinc-400 hover:text-white';
-      document.getElementById('nav-btn-profile').className = tab === 'profile' ? 'flex flex-col items-center gap-0.5 text-primary' : 'flex flex-col items-center gap-0.5 text-zinc-400 hover:text-white';
-
-      if (tab === 'library') {
-        refreshLibrary();
-      } else if (tab === 'profile') {
-        loadProfileStats();
+    // View Switching
+    function switchView(viewName) {
+      currentView = viewName;
+      ['search', 'library', 'downloads', 'vinyl', 'storage'].forEach(v => {
+        const section = document.getElementById(`view-${v}`);
+        const nav = document.getElementById(`nav-${v}`);
+        if (v === viewName) {
+          section?.classList.remove('hidden');
+          nav?.classList.add('text-primary', 'bg-surface-container', 'border', 'border-primary/20');
+          nav?.classList.remove('text-on-variant');
+        } else {
+          section?.classList.add('hidden');
+          nav?.classList.remove('text-primary', 'bg-surface-container', 'border', 'border-primary/20');
+          nav?.classList.add('text-on-variant');
+        }
+      });
+      if (viewName === 'vinyl') {
+        updateVinylVisuals();
       }
     }
 
-    // Search Functions
-    function clearSearch() {
-      searchInput.value = '';
-      searchClearBtn.classList.add('hidden');
-    }
+    // Audio Spectrum Visualizer
+    function initSpectrumCanvas() {
+      const canvas = document.getElementById('spectrum-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
 
-    function chipSearch(query) {
-      searchInput.value = query;
-      executeSearch();
-    }
+      function draw() {
+        requestAnimationFrame(draw);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    searchInput.addEventListener('input', () => {
-      searchClearBtn.classList.toggle('hidden', searchInput.value.trim() === '');
-    });
+        const barCount = 36;
+        const barWidth = (canvas.width / barCount) - 2;
 
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        executeSearch();
+        if (analyser && !audioEl.paused) {
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+          analyser.getByteFrequencyData(dataArray);
+
+          for (let i = 0; i < barCount; i++) {
+            const dataIndex = Math.floor(i * (bufferLength / barCount));
+            const value = dataArray[dataIndex] || 0;
+            const barHeight = (value / 255) * canvas.height * 0.9 + 4;
+
+            const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+            gradient.addColorStop(0, '#10b981');
+            gradient.addColorStop(1, '#06b6d4');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(i * (barWidth + 2), canvas.height - barHeight, barWidth, barHeight);
+          }
+        } else {
+          // Subtle idle waves
+          const time = Date.now() / 400;
+          for (let i = 0; i < barCount; i++) {
+            const idleHeight = Math.sin(time + i * 0.3) * 6 + 8;
+            ctx.fillStyle = '#1e2333';
+            ctx.fillRect(i * (barWidth + 2), canvas.height - idleHeight, barWidth, idleHeight);
+          }
+        }
       }
-    });
+      draw();
+    }
 
-    async function executeSearch() {
-      const query = searchInput.value.trim();
+    function setupWebAudio() {
+      if (!audioCtx) {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContext();
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 128;
+          audioSource = audioCtx.createMediaElementSource(audioEl);
+          audioSource.connect(analyser);
+          analyser.connect(audioCtx.destination);
+        } catch (e) {
+          console.warn('Web Audio initialization error:', e);
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Search Execution via REST API
+    async function executeSearch(customQuery) {
+      const input = document.getElementById('desktop-search-input');
+      const query = customQuery || input.value.trim();
       if (!query) return;
 
-      searchStatus.classList.remove('hidden');
-      searchStatusText.textContent = `Searching YouTube for "${query}"...`;
-      searchBtn.disabled = true;
+      if (!customQuery) switchView('search');
+
+      const spinner = document.getElementById('search-spinner');
+      const heading = document.getElementById('search-results-heading');
+      spinner?.classList.remove('hidden');
+      heading.textContent = `Search results for "${query}"`;
 
       try {
-        if (window.pywebview && window.pywebview.api) {
-          const results = await window.pywebview.api.search(query);
-          renderSearchResults(results);
-        } else {
-          // Fallback simulation when opened in standard browser preview
-          setTimeout(() => {
-            renderSearchResults([
-              { id: 'TO-_3tck2tg', title: 'Imagine Dragons - Bones (Official Music Video)', channel: 'ImagineDragons', duration_string: '2:46', thumbnail: 'https://i.ytimg.com/vi/TO-_3tck2tg/hq720.jpg' },
-              { id: 'ktvTqknDobU', title: 'Imagine Dragons - Radioactive', channel: 'ImagineDragons', duration_string: '3:06', thumbnail: 'https://i.ytimg.com/vi/ktvTqknDobU/hq720.jpg' },
-              { id: '7wtfhZwyrcc', title: 'Imagine Dragons - Believer', channel: 'ImagineDragons', duration_string: '3:24', thumbnail: 'https://i.ytimg.com/vi/7wtfhZwyrcc/hq720.jpg' }
-            ]);
-          }, 800);
-        }
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        searchResults = await res.json();
+        renderSearchResults(searchResults);
       } catch (err) {
-        searchStatusText.textContent = `Search error: ${err}`;
+        console.error('Search request failed:', err);
       } finally {
-        searchBtn.disabled = false;
+        spinner?.classList.add('hidden');
       }
     }
 
-    function renderSearchResults(results) {
-      searchResultsGrid.innerHTML = '';
-      if (!results || results.length === 0) {
-        searchStatusText.textContent = 'No results found.';
+    function quickFilter(q) {
+      if (!q) {
+        executeSearch('Top Hits 2026');
+      } else {
+        document.getElementById('desktop-search-input').value = q;
+        executeSearch(q);
+      }
+    }
+
+    function clearSearch() {
+      document.getElementById('desktop-search-input').value = '';
+    }
+
+    // Render Search Cards
+    function renderSearchResults(items) {
+      const grid = document.getElementById('search-grid');
+      if (!grid) return;
+
+      if (!items || items.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-on-variant">
+            <span class="material-symbols-outlined text-4xl mb-2 opacity-50">search_off</span>
+            <p class="text-sm font-semibold">No results found.</p>
+          </div>
+        `;
         return;
       }
 
-      searchStatusText.textContent = `Found ${results.length} video streams`;
+      grid.innerHTML = items.map((item, index) => {
+        const isOffline = library.some(t => t.id === item.id);
+        return `
+          <div class="group p-3.5 rounded-2xl bg-surface border border-borderline hover:border-primary/40 hover:bg-surface-container transition-all flex flex-col justify-between">
+            <div class="space-y-3">
+              <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-surface-elevated">
+                <img src="${item.thumbnail}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                <span class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-app/80 text-[10px] font-mono font-bold text-white backdrop-blur-sm">
+                  ${item.duration_string || '3:30'}
+                </span>
+                ${isOffline ? '<span class="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-primary text-[9px] font-bold text-app shadow">OFFLINE</span>' : ''}
+              </div>
 
-      results.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'p-2.5 rounded-2xl bg-surface-container border border-surface-container-high/80 hover:border-primary/40 flex items-center justify-between gap-3 transition-all hover:bg-surface-container-high/60';
-        
-        card.innerHTML = `
-          <div class="flex items-center gap-3 truncate max-w-[70%]">
-            <div class="relative w-16 h-12 rounded-xl overflow-hidden bg-surface-container-lowest shrink-0 shadow-md">
-              <img src="${item.thumbnail || 'https://picsum.photos/300/200'}" class="w-full h-full object-cover">
-              <span class="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/80 font-mono text-[9px] text-white">${item.duration_string || '3:30'}</span>
+              <div>
+                <h4 class="text-xs font-bold text-white line-clamp-2 leading-snug group-hover:text-primary-light transition-colors" title="${item.title}">
+                  ${item.title}
+                </h4>
+                <p class="text-[11px] text-on-variant mt-1 flex items-center gap-1 truncate">
+                  <span class="material-symbols-outlined text-[13px] text-primary">artist</span>
+                  <span>${item.channel}</span>
+                </p>
+              </div>
             </div>
-            <div class="truncate">
-              <h3 class="text-xs font-bold text-white truncate" title="${item.title}">${item.title}</h3>
-              <p class="text-[11px] text-zinc-400 truncate mt-0.5">${item.channel || 'Artist'}</p>
+
+            <div class="mt-4 pt-3 border-t border-borderline/60 flex items-center justify-between gap-2">
+              <button onclick="previewTrack('${item.id}', '${encodeURIComponent(item.title)}', '${encodeURIComponent(item.channel)}', '${encodeURIComponent(item.thumbnail)}')" class="flex-1 py-1.5 px-2.5 rounded-xl bg-surface-elevated hover:bg-primary hover:text-app text-[11px] font-bold text-white transition-all flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-sm fill">play_arrow</span>
+                <span>Play</span>
+              </button>
+
+              <button id="dl-btn-${item.id}" onclick="startDownload('${item.id}', '${encodeURIComponent(item.title)}', '${encodeURIComponent(item.channel)}', '${encodeURIComponent(item.thumbnail)}')" class="flex-1 py-1.5 px-2.5 rounded-xl ${isOffline ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-primary hover:bg-primary-light text-app'} text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                <span class="material-symbols-outlined text-sm">${isOffline ? 'download_done' : 'download'}</span>
+                <span>${isOffline ? 'Saved' : 'MP3'}</span>
+              </button>
             </div>
           </div>
-          <button onclick='handleGrabClick(${JSON.stringify(item)})' class="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-dark text-black font-bold text-xs flex items-center gap-1 shrink-0 shadow-[0_0_12px_rgba(74,222,128,0.25)] transition-transform active:scale-95">
-            <span class="material-symbols-outlined text-[16px]">download</span>
-            <span>Grab</span>
-          </button>
         `;
-        searchResultsGrid.appendChild(card);
-      });
+      }).join('');
     }
 
-    // Download Pipeline
-    async function handleGrabClick(item) {
-      // Check if already in library
-      const exists = library.find(track => track.id === item.id || track.title.toLowerCase() === item.title.toLowerCase());
-      if (exists) {
-        pendingDuplicateTrack = item;
-        document.getElementById('duplicate-modal-text').textContent = `"${item.title}" is already in your library. Download again as duplicate?`;
-        document.getElementById('duplicate-modal').classList.remove('hidden');
-        return;
+    // Download Trigger
+    async function startDownload(id, encTitle, encChannel, encThumb, isDuplicate = false) {
+      const title = decodeURIComponent(encTitle);
+      const channel = decodeURIComponent(encChannel);
+      const thumbnail = decodeURIComponent(encThumb);
+
+      const btn = document.getElementById(`dl-btn-${id}`);
+      if (btn) {
+        btn.innerHTML = `<span class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Queue</span>`;
+        btn.disabled = true;
       }
-      initiateDownload(item, false);
-    }
-
-    function closeDuplicateModal() {
-      document.getElementById('duplicate-modal').classList.add('hidden');
-      pendingDuplicateTrack = null;
-    }
-
-    function confirmDuplicateDownload() {
-      if (pendingDuplicateTrack) {
-        const item = pendingDuplicateTrack;
-        closeDuplicateModal();
-        initiateDownload(item, true);
-      }
-    }
-
-    async function initiateDownload(item, isDuplicate) {
-      downloadDrawer.classList.remove('hidden');
-      downloadDrawerTitle.textContent = `Grabbing: ${item.title}`;
-      downloadDrawerPercent.textContent = '0%';
-      downloadDrawerBar.style.width = '0%';
 
       try {
-        if (window.pywebview && window.pywebview.api) {
-          await window.pywebview.api.download(item.id, item.title, item.channel, item.thumbnail, isDuplicate);
-        } else {
-          // Simulation for development
-          let p = 0;
-          const interval = setInterval(() => {
-            p += 15;
-            onDownloadProgress(item.id, Math.min(p, 100));
-            if (p >= 100) {
-              clearInterval(interval);
-              setTimeout(() => {
-                onDownloadComplete({
-                  id: item.id,
-                  title: item.title,
-                  artist: item.channel,
-                  duration: item.duration || 180,
-                  filename: `${item.title}.mp3`,
-                  thumbnail: item.thumbnail
-                });
-              }, 400);
-            }
-          }, 300);
-        }
+        const res = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, title, channel, thumbnail, is_duplicate: isDuplicate })
+        });
+        const data = await res.json();
+        console.log('Download initiated:', data);
+        startDownloadPolling();
       } catch (err) {
-        downloadDrawerTitle.textContent = `Download failed: ${err}`;
+        console.error('Download error:', err);
       }
     }
 
-    // Callbacks from Python
-    window.onDownloadProgress = function(videoId, percent) {
-      downloadDrawer.classList.remove('hidden');
-      downloadDrawerPercent.textContent = `${Math.round(percent)}%`;
-      downloadDrawerBar.style.width = `${percent}%`;
-    };
+    // Active Downloads Polling
+    function startDownloadPolling() {
+      if (downloadPollTimer) clearInterval(downloadPollTimer);
+      downloadPollTimer = setInterval(pollDownloads, 1200);
+      pollDownloads();
+    }
 
-    window.onDownloadComplete = function(track) {
-      downloadDrawerPercent.textContent = '100%';
-      downloadDrawerBar.style.width = '100%';
-      downloadDrawerTitle.textContent = `Finished: ${track.title}`;
-      setTimeout(() => {
-        downloadDrawer.classList.add('hidden');
-      }, 2500);
+    async function pollDownloads() {
+      try {
+        const res = await fetch('/api/downloads/status');
+        const data = await res.json();
+        const active = data.downloads || [];
 
-      refreshLibrary();
-      loadProfileStats();
-    };
+        const badge = document.getElementById('sidebar-dl-count');
+        if (badge) {
+          if (active.length > 0) {
+            badge.textContent = active.length;
+            badge.classList.remove('hidden');
+          } else {
+            badge.classList.add('hidden');
+          }
+        }
 
-    // Library Functions
+        renderDownloadsView(active);
+
+        // Update card buttons if in search view
+        active.forEach(item => {
+          const btn = document.getElementById(`dl-btn-${item.id}`);
+          if (btn) {
+            btn.innerHTML = `<span>${item.percent}%</span>`;
+            if (item.percent === 100) {
+              btn.innerHTML = `<span class="material-symbols-outlined text-sm">check</span><span>Saved</span>`;
+            }
+          }
+        });
+
+        // If any finished, refresh library
+        if (active.some(a => a.percent === 100)) {
+          refreshLibrary();
+          refreshStorageStats();
+        }
+      } catch (err) {
+        console.warn('Poll downloads err:', err);
+      }
+    }
+
+    function renderDownloadsView(items) {
+      const container = document.getElementById('downloads-container');
+      if (!container) return;
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center rounded-2xl border border-borderline bg-surface/30">
+            <span class="material-symbols-outlined text-4xl text-on-variant/40 mb-2">download_done</span>
+            <p class="text-sm font-semibold text-white">No Active Downloads</p>
+            <p class="text-xs text-on-variant mt-1">Search any song on the Explore tab and click "MP3" to queue tracks.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map(item => `
+        <div class="p-4 rounded-2xl bg-surface border border-borderline flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-surface-elevated overflow-hidden shrink-0">
+            <img src="${item.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop'}" class="w-full h-full object-cover">
+          </div>
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-white truncate max-w-md">${item.title}</span>
+              <span class="font-mono text-primary font-bold">${item.percent}%</span>
+            </div>
+            <div class="w-full bg-surface-elevated h-2 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-primary to-accent h-full transition-all duration-300" style="width: ${item.percent}%"></div>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-on-variant">
+              <span>${item.status}</span>
+              <span class="font-mono">${item.speed}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Library Synchronization via REST API
     async function refreshLibrary() {
       try {
-        if (window.pywebview && window.pywebview.api) {
-          library = await window.pywebview.api.get_library();
-        }
+        const res = await fetch('/api/library');
+        library = await res.json();
+        renderLibraryTable(library);
+        updateSidebarCounters();
       } catch (err) {
-        console.error(err);
+        console.error('Fetch library error:', err);
       }
-
-      renderLibrary();
-      updateHeaderCount();
     }
 
-    function renderLibrary() {
-      libraryList.innerHTML = '';
-      if (!library || library.length === 0) {
-        libraryList.appendChild(libraryEmptyState);
+    function renderLibraryTable(items) {
+      const tbody = document.getElementById('library-table-body');
+      const countEl = document.getElementById('library-total-count');
+      const sizeEl = document.getElementById('library-total-size');
+      if (!tbody) return;
+
+      countEl.textContent = `${items.length} tracks`;
+      const totalMb = items.reduce((acc, cur) => acc + (cur.filesize_mb || 0), 0).toFixed(1);
+      sizeEl.textContent = `${totalMb} MB`;
+
+      if (items.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-12 text-center text-on-variant">
+              <span class="material-symbols-outlined text-4xl mb-2 opacity-50">library_music</span>
+              <p class="text-sm font-semibold text-white">Your Offline Library is Empty</p>
+              <p class="text-xs text-on-variant mt-1">Explore YouTube above and click "MP3" to save songs here.</p>
+            </td>
+          </tr>
+        `;
         return;
       }
 
-      originalQueue = [...library];
-      if (!isShuffle) {
-        playbackQueue = [...originalQueue];
-      }
-
-      library.forEach((track, index) => {
-        const item = document.createElement('div');
-        item.className = 'p-3 rounded-2xl bg-surface-container border border-surface-container-high/80 hover:border-primary/40 flex items-center justify-between gap-3 transition-all hover:bg-surface-container-high/60 cursor-pointer';
-        item.onclick = () => playTrackAtIndex(index);
-
-        item.innerHTML = `
-          <div class="flex items-center gap-3 truncate max-w-[75%]">
-            <div class="relative w-12 h-12 rounded-xl overflow-hidden bg-surface-container-lowest shrink-0 shadow-md">
-              <img src="${track.thumbnail || 'https://picsum.photos/300/200'}" class="w-full h-full object-cover">
-            </div>
-            <div class="truncate">
-              <h3 class="text-xs font-bold text-white truncate">${track.title}</h3>
-              <p class="text-[11px] text-zinc-400 truncate mt-0.5">${track.artist || 'Unknown Artist'}</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
-            <span class="text-[11px] font-mono text-zinc-400 mr-2">${formatTime(track.duration || 180)}</span>
-            <button onclick="playTrackAtIndex(${index})" class="w-8 h-8 rounded-full bg-primary/20 text-primary hover:bg-primary hover:text-black flex items-center justify-center transition-colors">
-              <span class="material-symbols-outlined text-[18px] fill">play_arrow</span>
-            </button>
-            <button onclick="deleteTrack('${track.id}')" class="p-1.5 text-zinc-400 hover:text-red-400 rounded-full transition-colors" title="Delete">
-              <span class="material-symbols-outlined text-[18px]">delete</span>
-            </button>
-          </div>
+      tbody.innerHTML = items.map((item, index) => {
+        const isCurrent = currentTrack && currentTrack.id === item.id;
+        return `
+          <tr class="hover:bg-surface-elevated/60 transition-colors group ${isCurrent ? 'bg-primary/10' : ''}">
+            <td class="py-3 px-4 text-center font-mono text-on-variant">
+              ${isCurrent && !audioEl.paused ? '<span class="material-symbols-outlined text-primary text-base fill">graphic_eq</span>' : (index + 1)}
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-surface-elevated overflow-hidden shrink-0 border border-borderline">
+                  <img src="${item.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop'}" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <h4 class="font-bold text-white ${isCurrent ? 'text-primary' : ''}">${item.title}</h4>
+                  <p class="text-[11px] text-on-variant">${item.artist || 'Artist'}</p>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-4 font-mono text-on-variant">${item.duration_string || '3:00'}</td>
+            <td class="py-3 px-4 font-mono text-on-variant">${item.filesize_mb || 4.2} MB</td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 rounded bg-surface-container text-[10px] font-mono text-primary border border-primary/20">320k MP3</span>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <div class="flex items-center justify-end gap-1">
+                <button onclick="playTrackFromLibrary('${item.id}')" class="p-1.5 rounded-lg hover:bg-primary hover:text-app text-white transition-colors" title="Play Now">
+                  <span class="material-symbols-outlined text-base fill">play_arrow</span>
+                </button>
+                <button onclick="deleteTrack('${item.id}')" class="p-1.5 rounded-lg hover:bg-red-500/20 text-on-variant hover:text-red-400 transition-colors" title="Delete from Offline Vault">
+                  <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
+            </td>
+          </tr>
         `;
-        libraryList.appendChild(item);
-      });
+      }).join('');
+    }
+
+    function filterLibrary(term) {
+      const clean = term.toLowerCase().trim();
+      const filtered = library.filter(t => 
+        (t.title && t.title.toLowerCase().includes(clean)) || 
+        (t.artist && t.artist.toLowerCase().includes(clean))
+      );
+      renderLibraryTable(filtered);
     }
 
     async function deleteTrack(trackId) {
-      if (!confirm('Are you sure you want to delete this track from your device?')) return;
+      if (!confirm('Are you sure you want to delete this track from your offline vault?')) return;
       try {
-        if (window.pywebview && window.pywebview.api) {
-          library = await window.pywebview.api.delete_track(trackId);
-          renderLibrary();
-          loadProfileStats();
-          if (currentIndex >= 0 && playbackQueue[currentIndex]?.id === trackId) {
-            audio.pause();
-            miniPlayer.classList.add('hidden');
-            closeVinylPlayer();
-          }
-        }
+        const res = await fetch('/api/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: trackId })
+        });
+        library = await res.json();
+        renderLibraryTable(library);
+        updateSidebarCounters();
+        refreshStorageStats();
       } catch (err) {
-        alert(`Delete failed: ${err}`);
+        console.error('Delete track error:', err);
       }
     }
 
-    function deleteCurrentSong() {
-      if (currentIndex >= 0 && playbackQueue[currentIndex]) {
-        deleteTrack(playbackQueue[currentIndex].id);
+    // Playback Engine
+    function playTrackFromLibrary(trackId) {
+      const idx = library.findIndex(t => t.id === trackId);
+      if (idx !== -1) {
+        playbackQueue = [...library];
+        originalQueue = [...library];
+        queueIndex = idx;
+        loadAndPlayTrack(playbackQueue[queueIndex]);
       }
     }
 
-    // Playback Controls
-    async function playTrackAtIndex(index) {
-      if (index < 0 || index >= playbackQueue.length) return;
-      currentIndex = index;
-      const track = playbackQueue[currentIndex];
-
-      let streamUrl = track.stream_url;
-      if (!streamUrl && window.pywebview && window.pywebview.api) {
-        streamUrl = await window.pywebview.api.get_audio_url(track.filename);
+    function playAllLibrary(shuffle = false) {
+      if (library.length === 0) return;
+      originalQueue = [...library];
+      if (shuffle) {
+        isShuffle = true;
+        document.getElementById('btn-shuffle')?.classList.add('text-primary');
+        playbackQueue = [...library].sort(() => Math.random() - 0.5);
+      } else {
+        playbackQueue = [...library];
       }
-
-      audio.src = streamUrl || '';
-      audio.play();
-
-      // Update Mini Player
-      miniArtwork.src = track.thumbnail || 'https://picsum.photos/300/200';
-      miniTitle.textContent = track.title;
-      miniArtist.textContent = track.artist || 'Unknown Artist';
-      miniPlayer.classList.remove('hidden');
-
-      // Update Vinyl Sheet
-      vinylArtwork.src = track.thumbnail || 'https://picsum.photos/300/200';
-      vinylTitle.textContent = track.title;
-      vinylArtist.textContent = track.artist || 'Unknown Artist';
-      timeTotal.textContent = formatTime(track.duration || 180);
-
-      updatePlayIcons(true);
+      queueIndex = 0;
+      loadAndPlayTrack(playbackQueue[0]);
     }
 
-    function togglePlay() {
-      if (!audio.src) {
-        if (playbackQueue.length > 0) {
-          playTrackAtIndex(0);
+    function previewTrack(id, encTitle, encChannel, encThumb) {
+      const title = decodeURIComponent(encTitle);
+      const channel = decodeURIComponent(encChannel);
+      const thumb = decodeURIComponent(encThumb);
+
+      // Check if it is already in library
+      const existing = library.find(t => t.id === id);
+      if (existing) {
+        loadAndPlayTrack(existing);
+        return;
+      }
+
+      // Stream fallback
+      const trackObj = {
+        id: id,
+        title: title,
+        artist: channel,
+        thumbnail: thumb,
+        stream_url: `https://www.youtube.com/watch?v=${id}`
+      };
+      // Trigger download in background and notify user
+      startDownload(id, encTitle, encChannel, encThumb);
+      switchView('downloads');
+    }
+
+    function loadAndPlayTrack(track) {
+      setupWebAudio();
+      currentTrack = track;
+
+      // Update Bottom Player Bar UI
+      document.getElementById('player-art').src = track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&h=100&fit=crop';
+      document.getElementById('player-title').textContent = track.title;
+      document.getElementById('player-artist').textContent = track.artist || 'Offline Audio';
+
+      // Set Audio Source
+      audioEl.src = track.stream_url;
+      audioEl.play().then(() => {
+        setPlayingUI(true);
+      }).catch(e => {
+        console.warn('Playback autoplay hindered:', e);
+      });
+
+      updateVinylVisuals();
+      renderLibraryTable(library);
+    }
+
+    function togglePlayPause() {
+      if (!currentTrack) {
+        if (library.length > 0) {
+          playTrackFromLibrary(library[0].id);
         }
         return;
       }
-      if (audio.paused) {
-        audio.play();
+
+      setupWebAudio();
+      if (audioEl.paused) {
+        audioEl.play();
+        setPlayingUI(true);
       } else {
-        audio.pause();
+        audioEl.pause();
+        setPlayingUI(false);
       }
     }
 
-    function nextTrack() {
+    function setPlayingUI(isPlaying) {
+      const icon = document.getElementById('btn-play-icon');
+      const tonearm = document.getElementById('vinyl-tonearm');
+      const disc = document.getElementById('turntable-disc');
+      const bars = document.getElementById('playing-bars');
+
+      if (isPlaying) {
+        icon.textContent = 'pause';
+        tonearm?.classList.remove('paused');
+        tonearm?.classList.add('playing');
+        disc?.classList.remove('paused');
+        bars?.classList.remove('hidden');
+      } else {
+        icon.textContent = 'play_arrow';
+        tonearm?.classList.remove('playing');
+        tonearm?.classList.add('paused');
+        disc?.classList.add('paused');
+        bars?.classList.add('hidden');
+      }
+    }
+
+    function playNextTrack() {
       if (playbackQueue.length === 0) return;
-      if (currentIndex + 1 < playbackQueue.length) {
-        playTrackAtIndex(currentIndex + 1);
-      } else if (repeatMode === 'all') {
-        playTrackAtIndex(0);
-      } else {
-        audio.pause();
-        audio.currentTime = 0;
-      }
+      queueIndex = (queueIndex + 1) % playbackQueue.length;
+      loadAndPlayTrack(playbackQueue[queueIndex]);
     }
 
-    function prevTrack() {
-      if (audio.currentTime > 3) {
-        audio.currentTime = 0;
-        return;
-      }
-      if (currentIndex - 1 >= 0) {
-        playTrackAtIndex(currentIndex - 1);
-      } else {
-        audio.currentTime = 0;
-      }
+    function playPrevTrack() {
+      if (playbackQueue.length === 0) return;
+      queueIndex = (queueIndex - 1 + playbackQueue.length) % playbackQueue.length;
+      loadAndPlayTrack(playbackQueue[queueIndex]);
     }
 
-    function updatePlayIcons(playing) {
-      miniPlayIcon.textContent = playing ? 'pause' : 'play_arrow';
-      vinylPlayIcon.textContent = playing ? 'pause' : 'play_arrow';
-    }
-
-    function onSeekInput(val) {
-      isSeeking = true;
-      if (audio.duration) {
-        timeCurrent.textContent = formatTime((val / 100) * audio.duration);
-      }
-    }
-
-    function onSeekChange(val) {
-      if (audio.duration) {
-        audio.currentTime = (val / 100) * audio.duration;
-      }
-      isSeeking = false;
-    }
-
-    function setVolume(val) {
-      audio.volume = parseFloat(val);
-    }
-
-    // Shuffle & Repeat
     function toggleShuffle() {
       isShuffle = !isShuffle;
-      btnShuffle.classList.toggle('text-primary', isShuffle);
-      btnShuffle.classList.toggle('text-zinc-500', !isShuffle);
-
+      const btn = document.getElementById('btn-shuffle');
       if (isShuffle) {
-        const currentSong = playbackQueue[currentIndex];
-        let remaining = originalQueue.filter(t => t.id !== currentSong?.id);
-        // Fisher-Yates
-        for (let i = remaining.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+        btn?.classList.add('text-primary');
+        if (currentTrack) {
+          const rest = playbackQueue.filter(t => t.id !== currentTrack.id);
+          rest.sort(() => Math.random() - 0.5);
+          playbackQueue = [currentTrack, ...rest];
+          queueIndex = 0;
         }
-        playbackQueue = currentSong ? [currentSong, ...remaining] : remaining;
-        currentIndex = 0;
       } else {
-        const currentSong = playbackQueue[currentIndex];
+        btn?.classList.remove('text-primary');
         playbackQueue = [...originalQueue];
-        currentIndex = currentSong ? playbackQueue.findIndex(t => t.id === currentSong.id) : 0;
+        if (currentTrack) {
+          queueIndex = playbackQueue.findIndex(t => t.id === currentTrack.id);
+        }
       }
     }
 
     function toggleRepeat() {
-      if (repeatMode === 'off') {
-        repeatMode = 'all';
-        btnRepeat.className = 'p-2 text-primary transition-colors';
-        repeatIcon.textContent = 'repeat';
-      } else if (repeatMode === 'all') {
-        repeatMode = 'one';
-        btnRepeat.className = 'p-2 text-primary transition-colors';
-        repeatIcon.textContent = 'repeat_one';
+      repeatState = (repeatState + 1) % 3;
+      const btn = document.getElementById('btn-repeat');
+      const icon = document.getElementById('icon-repeat');
+      if (repeatState === 0) {
+        btn?.classList.remove('text-primary');
+        icon.textContent = 'repeat';
+      } else if (repeatState === 1) {
+        btn?.classList.add('text-primary');
+        icon.textContent = 'repeat';
       } else {
-        repeatMode = 'off';
-        btnRepeat.className = 'p-2 text-zinc-500 hover:text-white transition-colors';
-        repeatIcon.textContent = 'repeat';
+        btn?.classList.add('text-primary');
+        icon.textContent = 'repeat_one';
       }
     }
 
-    // Vinyl Sheet Open / Close
-    function openVinylPlayer() {
-      vinylSheet.classList.remove('hidden');
-    }
+    // Audio Event Handlers
+    function setupAudioListeners() {
+      audioEl.addEventListener('timeupdate', () => {
+        if (isUserSeeking || isNaN(audioEl.duration)) return;
+        const current = audioEl.currentTime;
+        const total = audioEl.duration;
+        const percent = (current / total) * 100;
 
-    function closeVinylPlayer() {
-      vinylSheet.classList.add('hidden');
-    }
+        document.getElementById('player-seek').value = percent;
+        document.getElementById('player-current-time').textContent = formatSeconds(current);
+        document.getElementById('player-duration').textContent = formatSeconds(total);
+      });
 
-    // Profile & Storage Stats
-    async function loadProfileStats() {
-      try {
-        if (window.pywebview && window.pywebview.api) {
-          const stats = await window.pywebview.api.get_stats();
-          document.getElementById('profile-tracks-count').textContent = stats.total_tracks || 0;
-          document.getElementById('profile-storage-size').textContent = `${stats.total_size_mb || 0} MB`;
-          document.getElementById('profile-storage-path').textContent = stats.storage_path || 'C:\\Users\\Music\\ChitauriMusic';
-          document.getElementById('header-song-count').textContent = `${stats.total_tracks || 0} Songs`;
+      audioEl.addEventListener('ended', () => {
+        if (repeatState === 2) {
+          audioEl.currentTime = 0;
+          audioEl.play();
+        } else if (repeatState === 1 || queueIndex < playbackQueue.length - 1) {
+          playNextTrack();
+        } else {
+          setPlayingUI(false);
         }
-      } catch (err) {
-        console.error(err);
-      }
+      });
     }
 
-    async function openFolder() {
-      if (window.pywebview && window.pywebview.api) {
-        await window.pywebview.api.open_storage_folder();
-      }
+    function onUserSeek(value) {
+      if (!audioEl.duration) return;
+      const targetTime = (value / 100) * audioEl.duration;
+      audioEl.currentTime = targetTime;
     }
 
-    async function clearCache() {
-      if (!confirm('Clear cached temporary files and search history?')) return;
-      alert('Cache cleared.');
+    function setVolume(val) {
+      audioEl.volume = parseFloat(val);
+      const icon = document.getElementById('icon-volume');
+      if (audioEl.volume === 0) icon.textContent = 'volume_off';
+      else if (audioEl.volume < 0.5) icon.textContent = 'volume_down';
+      else icon.textContent = 'volume_up';
     }
 
-    function updateHeaderCount() {
-      const count = library.length;
-      document.getElementById('header-song-count').textContent = `${count} Songs`;
+    function toggleMute() {
+      audioEl.muted = !audioEl.muted;
+      document.getElementById('icon-volume').textContent = audioEl.muted ? 'volume_off' : 'volume_up';
     }
 
-    function formatTime(secs) {
-      if (!secs || isNaN(secs)) return '0:00';
-      const m = Math.floor(secs / 60);
-      const s = Math.floor(secs % 60);
+    function formatSeconds(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
       return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
-    // Initialize on ready
-    window.addEventListener('pywebviewready', () => {
-      refreshLibrary();
-      loadProfileStats();
-    });
+    function updateVinylVisuals() {
+      if (!currentTrack) return;
+      const title = document.getElementById('vinyl-track-title');
+      const artist = document.getElementById('vinyl-track-artist');
+      const art = document.getElementById('vinyl-center-art');
+      if (title) title.textContent = currentTrack.title;
+      if (artist) artist.textContent = currentTrack.artist || 'Local Master';
+      if (art && currentTrack.thumbnail) art.src = currentTrack.thumbnail;
+    }
 
-    // Fallback load
-    setTimeout(() => {
-      refreshLibrary();
-      loadProfileStats();
-    }, 500);
+    // Storage Stats via REST API
+    async function refreshStorageStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const stats = await res.json();
+
+        document.getElementById('sidebar-tracks-text').textContent = `${stats.total_tracks} Tracks`;
+        document.getElementById('sidebar-size-text').textContent = `${stats.total_size_mb} MB`;
+        document.getElementById('vault-tracks-badge').textContent = `${stats.total_tracks} Tracks`;
+        document.getElementById('vault-size-badge').textContent = `${stats.total_size_mb} MB`;
+        document.getElementById('storage-dir-path').textContent = stats.storage_path;
+
+        updateSidebarCounters();
+      } catch (err) {
+        console.warn('Storage stats err:', err);
+      }
+    }
+
+    function updateSidebarCounters() {
+      const countEl = document.getElementById('sidebar-lib-count');
+      if (countEl) countEl.textContent = library.length;
+    }
+
+    async function openStorageFolder() {
+      try {
+        await fetch('/api/open_folder', { method: 'POST' });
+      } catch (err) {
+        console.error('Open folder error:', err);
+      }
+    }
+
+    // Automated Desktop Screenshot Capture
+    async function captureCurrentDesktopScreen(customName) {
+      const name = customName || `screenshot_desktop_${currentView}.png`;
+      try {
+        if (typeof html2canvas === 'undefined') {
+          console.warn('html2canvas not loaded');
+          return;
+        }
+
+        const canvas = await html2canvas(document.body, {
+          backgroundColor: '#090a0f',
+          scale: 1.5,
+          useCORS: true,
+          logging: false
+        });
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const res = await fetch('/api/save_screenshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, data: dataUrl })
+        });
+        const result = await res.json();
+        console.log('Desktop Screenshot saved:', result);
+      } catch (e) {
+        console.error('Screenshot capture failed:', e);
+      }
+    }
+
+    // Expose capture for automated tests
+    window.captureDesktopScreen = captureCurrentDesktopScreen;
+    window.switchAppView = switchView;
+    window.executeDesktopSearch = executeSearch;
   </script>
 </body>
 </html>

@@ -42,6 +42,15 @@ scratch*.m4a
 *.part
 *.ytdl
 
+# Whitelist official showcase screenshots for GitHub documentation
+!screenshot_1_search.png
+!screenshot_2_library.png
+!screenshot_3_player.png
+!screenshot_4_profile.png
+!screenshot_desktop_search.png
+!screenshot_desktop_library.png
+!screenshot_desktop_player.png
+
 # IDE & OS
 .idea/
 .vscode/

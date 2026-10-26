@@ -2,12 +2,12 @@
 
 <p align="center">
   <img alt="Project" src="https://img.shields.io/badge/project-Chitauri%20Audio-10b981?style=for-the-badge">
-  <img alt="Status" src="https://img.shields.io/badge/status-App%20stage-orange?style=for-the-badge">
+  <img alt="Status" src="https://img.shields.io/badge/status-Production%20Ready-green?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge">
-  <img alt="Rust" src="https://img.shields.io/badge/language-Rust%201.80+-DEA584?style=for-the-badge">
-  <img alt="Flutter" src="https://img.shields.io/badge/framework-Flutter%203.x-02569B?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%20%7C%20Windows-lightgrey?style=for-the-badge">
   <img alt="Architecture" src="https://img.shields.io/badge/architecture-Client--Side%20Zero--Backend-purple?style=for-the-badge">
+  <img alt="Audio Bitrate" src="https://img.shields.io/badge/audio-320%20kbps%20MP3%20%7C%20AAC-brightgreen?style=for-the-badge">
+  <img alt="Storage Isolation" src="https://img.shields.io/badge/storage-.nomedia%20Vault-success?style=for-the-badge">
 </p>
 
 ---
@@ -18,9 +18,34 @@ Chitauri is an entirely client-side, privacy-focused audio suite engineered for 
 
 The system features storage isolation via the `.nomedia` protocol, preventing operating system media crawlers from indexing downloaded tracks, while keeping files organized and directly manageable through device file managers.
 
-The suite provides two deployment targets:
-1. **Android Client (`com.chitauri.audio`)**: A high-performance Flutter mobile application backed by Kotlin foreground services, hardware-accelerated audio metadata extraction, and native stream resolution.
-2. **Desktop Application (`chitauri.exe`)**: A pure Rust standalone binary built with `eframe`, `egui`, `tokio`, and `rodio`, delivering zero-dependency native playback and desktop audio management.
+The suite provides two production deployment targets:
+1. **Windows Desktop Suite (`chitauri.exe`)**: A widescreen 1260x820 desktop application featuring a left navigation sidebar, responsive YouTube exploration grid, rich tabular offline vault with metadata inspection, dedicated download queue, real-time Web Audio API spectrum visualizer, and an interactive vinyl turntable studio.
+2. **Android Mobile Client (`com.chitauri.audio`)**: A high-performance mobile application backed by Kotlin foreground services, hardware-accelerated audio metadata extraction, and native stream resolution.
+
+---
+
+## Application Interfaces and Visual Telemetry
+
+### Windows Desktop Suite (`chitauri.exe`)
+
+| Explore and Search Grid | Offline Vault and Data Table |
+| :---: | :---: |
+| ![Desktop Search](screenshot_desktop_search.png) | ![Desktop Library](screenshot_desktop_library.png) |
+| *Widescreen search feed with responsive cards, quick genre pills, and instant streaming/downloading triggers.* | *Offline library table displaying track titles, artists, durations, file sizes, format badges, and delete actions.* |
+
+<p align="center">
+  <b>Vinyl Turntable Studio and Live Spectrum Visualizer</b><br>
+  <img alt="Desktop Turntable" src="screenshot_desktop_player.png" width="900">
+  <br>
+  <i>High-fidelity turntable with rotating vinyl record at 33 RPM, animated mechanical tonearm, real-time 36-band Web Audio API frequency visualizer, and persistent bottom player controls.</i>
+</p>
+
+### Android Mobile Client (`com.chitauri.audio`)
+
+| 1. Explore Feed | 2. Offline Library | 3. Turntable Player | 4. Storage Vault |
+| :---: | :---: | :---: | :---: |
+| ![Mobile Search](screenshot_1_search.png) | ![Mobile Library](screenshot_2_library.png) | ![Mobile Player](screenshot_3_player.png) | ![Mobile Profile](screenshot_4_profile.png) |
+| *YouTube search feed with card art.* | *Local track list with durations and actions.* | *Vinyl player with glowing equalizer.* | *Storage isolation and track metrics.* |
 
 ---
 
@@ -33,38 +58,42 @@ The suite provides two deployment targets:
 |                               PRESENTATION LAYER                                      |
 |                                                                                       |
 |   +------------------------------------+   +--------------------------------------+   |
-|   | Android Client (Flutter UI)        |   | Desktop Client (Rust egui/eframe)    |   |
-|   | - Miniature Search & Filter Feed   |   | - Mobile Viewport Simulation         |   |
-|   | - Vinyl Turntable Player Sheet     |   | - Low-Latency Immediate Mode Canvas  |   |
-|   | - Offline Library & Playlists      |   | - Integrated Audio Waveform & State  |   |
-|   | - Storage Allocation Monitor       |   | - Responsive Track Management        |   |
+|   | Windows Desktop Suite (WebView2)   |   | Android Client (Flutter UI)          |   |
+|   | - 1260x820 Widescreen Responsive   |   | - Miniature Search & Filter Feed     |   |
+|   | - Left Navigation Sidebar & Stats  |   | - Vinyl Turntable Player Sheet       |   |
+|   | - Responsive YouTube Cards Grid    |   | - Offline Library & Playlists        |   |
+|   | - Tabular Offline Library View     |   | - Storage Allocation Monitor         |   |
+|   | - Dedicated Active Download Queue  |   | - Docked Persistent Mini-Player      |   |
+|   | - Turntable Studio & Spectrum Vis  |   | - Lockscreen Media Controls          |   |
+|   | - Persistent Bottom Player Bar     |   |                                      |   |
 |   +-----------------+------------------+   +-------------------+------------------+   |
 +---------------------|------------------------------------------|----------------------+
-                      | Platform Channels                        | Tokio MPSC Channels
+                      | REST API / HTTP 206                      | Platform MethodChannels
                       v                                          v
 +---------------------------------------------------------------------------------------+
 |                             CONTROL & SERVICE LAYER                                   |
 |                                                                                       |
 |   +------------------------------------+   +--------------------------------------+   |
-|   | Android Platform Services (Kotlin) |   | Asynchronous Rust Core (Tokio)       |   |
-|   | - ChitauriDownloadService          |   | - Multi-Threaded Task Coordinator    |   |
-|   | - ChitauriPlaybackService          |   | - Dual-Queue State Machine           |   |
-|   | - Hardware MediaMetadataRetriever  |   | - Fisher-Yates Pinned Shuffle        |   |
-|   | - Notification & MediaSession API  |   | - Three-State Repeat Machine         |   |
+|   | Internal Desktop Server (Python)   |   | Android Platform Services (Kotlin)   |   |
+|   | - ThreadingHTTPServer (Localhost)  |   | - ChitauriDownloadService            |   |
+|   | - HTTP 206 Partial Content Stream  |   | - ChitauriPlaybackService            |   |
+|   | - Endpoints: search/download/lib   |   | - Hardware MediaMetadataRetriever    |   |
+|   | - Real-time Download Thread Pool   |   | - Notification & MediaSession API    |   |
+|   | - Dual-Queue Playback State Engine |   | - Partial CPU Wake Lock Management   |   |
 |   +-----------------+------------------+   +-------------------+------------------+   |
 +---------------------|------------------------------------------|----------------------+
-                      | InnerTube Engine / QuickJS               | Reqwest HTTP Client
+                      | Local Stream Extraction Engine           | QuickJS / InnerTube
                       v                                          v
 +---------------------------------------------------------------------------------------+
 |                          EXTRACTION & STREAMING LAYER                                 |
 |                                                                                       |
 |   +-------------------------------------------------------------------------------+   |
 |   | Direct Client-Side Stream Resolver                                            |   |
-|   | - Anonymous Android Client Context Emulation                                  |   |
-|   | - Multi-Client Fallback (Android -> Web -> TV)                                |   |
+|   | - Anonymous Android & Web Client Context Emulation                            |   |
+|   | - yt-dlp & FFmpeg 320kbps MP3 Audio Extraction Pipeline                       |   |
 |   | - QuickJS JavaScript Signature Deciphering Engine                             |   |
 |   | - Adaptive Audio Stream Extraction (AAC itag 140 / Opus itag 251)             |   |
-|   | - Chunked Asynchronous Downloader with Dynamic Progress Telemetry             |   |
+|   | - Chunked Asynchronous Downloader with Dynamic Percentage Telemetry           |   |
 |   +---------------------------------------+---------------------------------------+   |
 +-------------------------------------------|-------------------------------------------+
                                             v
@@ -72,10 +101,10 @@ The suite provides two deployment targets:
 |                           AUDIO ENGINE & HARDWARE OUTPUT                              |
 |                                                                                       |
 |   +------------------------------------+   +--------------------------------------+   |
-|   | Android Audio Sink                 |   | Desktop Audio Sink                   |   |
-|   | - Android AAudio / Oboe Native API |   | - Rodio Audio Pipeline               |   |
-|   | - Hardware DSP Offload             |   | - Symphonia Hardware Audio Decoders  |   |
-|   | - Low-Power Sleep-State Playback   |   | - CPAL Low-Latency Audio Stream      |   |
+|   | Desktop Audio Engine               |   | Android Audio Sink                   |   |
+|   | - HTML5 Audio Engine + Range Stream|   | - Android AAudio / Oboe Native API   |   |
+|   | - Web Audio API Analyser Node      |   | - Hardware DSP Offload               |   |
+|   | - 36-Band Real-Time Spectrum Canvas|   | - Low-Power Sleep-State Playback     |   |
 |   +------------------------------------+   +--------------------------------------+   |
 +-------------------------------------------+-------------------------------------------+
                                             |
@@ -90,7 +119,7 @@ The suite provides two deployment targets:
 |   | |-- tracks_catalog.json  (Synchronous metadata catalog and playback cache)    |   |
 |   | |-- playlists.json       (Custom playlist structures and track ordering)      |   |
 |   | |-- thumbnails/          (Locally cached album art and artwork assets)        |   |
-|   | +-- *.m4a / *.mp3        (ID3v2 / MP4 atom tagged tracks, open for File Mgr)  |   |
+|   | +-- *.mp3 / *.m4a        (ID3v2 / MP4 atom tagged tracks, open for File Mgr)  |   |
 |   +-------------------------------------------------------------------------------+   |
 +---------------------------------------------------------------------------------------+
 ```
@@ -114,7 +143,7 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
 [ Phase 3: Adaptive Stream Resolution & Deciphering ]
          |
          v
-[ Phase 4: Chunked Download & Foreground Service ]
+[ Phase 4: Chunked Download & Background Worker ]
          |
          v
 [ Phase 5: Hardware Metadata Extraction & ID3 Tagging ]
@@ -133,11 +162,11 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
 4. **Data Normalization:** Extracted attributes (Video ID, Title, Artist/Channel, Duration Estimate, Thumbnail URL) are mapped into immutable track structs and rendered in the interface.
 
 ### Phase 2: Song Selection and Duplicate Verification
-1. **User Interaction:** The user taps a song card or download trigger.
+1. **User Interaction:** The user clicks or taps a song card or download trigger.
 2. **Catalog Collision Check:** The application queries the local storage registry (`tracks_catalog.json`) using both the unique Video ID and sanitized title string.
 3. **Conflict Handling:**
    - If the track is unrecorded, download starts immediately.
-   - If a file with an identical title exists, the user is presented with a resolution dialog. If confirmed, an incrementing index (e.g., `Title (2).m4a`) is applied.
+   - If a file with an identical title exists, the user is presented with a resolution dialog. If confirmed, an incrementing index (e.g., `Title (2).mp3`) is applied.
    - Placeholder and transitory states (e.g., "fetching title") are filtered to prevent false duplicate collisions.
 
 ### Phase 3: Adaptive Stream Resolution and Signature Deciphering
@@ -150,15 +179,13 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
    - The embedded QuickJS runtime executes the signature unscrambling algorithm dynamically.
 4. **Client Fallback:** If an endpoint returns HTTP 403 or bot challenges, the resolver falls back across client personas in sequence: `android` -> `web` -> `tv`.
 
-### Phase 4: Chunked Download and Foreground Service Execution
-1. **Service Promotion:** On Android, a foreground service (`ChitauriDownloadService`) is promoted with `DATA_SYNC` and `MEDIA_PLAYBACK` types, acquiring a CPU `PARTIAL_WAKE_LOCK`. This guarantees downloads complete even when the application is minimized or the screen is off.
+### Phase 4: Chunked Download and Background Worker Execution
+1. **Service Promotion:** On Android, a foreground service (`ChitauriDownloadService`) is promoted with `DATA_SYNC` and `MEDIA_PLAYBACK` types, acquiring a CPU `PARTIAL_WAKE_LOCK`. On Windows, a background thread pool handles extraction without blocking the GUI.
 2. **Byte Stream Buffering:** The client streams binary chunks through an HTTP range-request loop, preventing excessive RAM consumption.
-3. **Telemetry Streaming:** Download progress (0% to 85%) streams in real time via thread-safe channels (`tokio::sync::mpsc` on desktop, platform MethodChannels on Android) to update:
-   - In-app progress bars.
-   - Pinned system notification drawer with cancellation actions.
+3. **Telemetry Streaming:** Download progress (0% to 100%) streams in real time via thread-safe REST status polls and platform channels to update in-app progress bars and system notifications.
 
 ### Phase 5: Hardware Metadata Extraction and Audio Tagging
-1. **Hardware Duration Verification:** Relying on estimated network durations often causes time-scrubber drift. After the audio file finishes downloading, the native bridge initializes the Android `MediaMetadataRetriever` (or Symphonia hardware decoder on desktop):
+1. **Hardware Duration Verification:** Relying on estimated network durations often causes time-scrubber drift. After the audio file finishes downloading, the native bridge initializes the Android `MediaMetadataRetriever` (or FFmpeg on desktop):
    - The raw audio container is parsed at the hardware level.
    - Accurate duration in milliseconds is extracted and written to the metadata record.
 2. **Artwork and Container Tagging:**
@@ -166,7 +193,7 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
    - Audio metadata tags (ID3v2 for MP3, MP4 user atoms for M4A) are injected into the file header: Title, Contributing Artist, Album Name, Track Duration, and Embedded Cover Art.
 
 ### Phase 6: Storage Isolation and Sentinel Enforcement
-1. **Dedicated Directory:** All tracks are stored in `/Music/ChitauriMusic/` on Android, or the local user music folder on Windows.
+1. **Dedicated Directory:** All tracks are stored in `/Music/ChitauriMusic/` on Android, or `%USERPROFILE%\Music\ChitauriMusic\` on Windows.
 2. **The `.nomedia` Protocol:**
    - An empty sentinel file named `.nomedia` is created within `ChitauriMusic/`.
    - The operating system `MediaScanner` crawler encounters the sentinel and excludes the directory from the global `MediaStore` index.
@@ -175,7 +202,7 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
 3. **Catalog Synchronization:** The physical file is committed, and `tracks_catalog.json` is updated. Event buses notify the Library view, Profile statistics counters, and storage meters without requiring an application restart.
 
 ### Phase 7: Deterministic Playback and State Management
-1. **Audio Hardware Offloading:** On Android, playback streams through `AAudio` or `Oboe` directly to the system Digital Signal Processor (DSP), minimizing CPU core wakeups. On Windows, audio buffers are processed by `rodio` via low-latency WASAPI/CPAL streams.
+1. **Audio Hardware Offloading:** On Android, playback streams through `AAudio` or `Oboe` directly to the system Digital Signal Processor (DSP), minimizing CPU core wakeups. On Windows, audio buffers are streamed with HTTP 206 Partial Content range support into the HTML5 Audio engine connected to a 36-band Web Audio API Analyser.
 2. **Dual-Queue State Invariant:**
    - `original_queue`: Preserves the user's sequential playlist order.
    - `playback_queue`: Holds the active playback sequence.
@@ -186,30 +213,33 @@ The Chitauri audio pipeline operates entirely on the client device. Below is the
    - `RepeatMode::Off`: Playback ceases when the queue concludes.
    - `RepeatMode::All`: The queue restarts from index `0` upon reaching the end.
    - `RepeatMode::One`: The current track repeats indefinitely.
-5. **Persistent Notification Controls:** On Android, media playback notifications are registered with non-dismissible flags (`FLAG_ONGOING_EVENT`, `FLAG_NO_CLEAR`) and synced with Android `MediaSessionCompat` for lock screen and Bluetooth AVRCP controls.
 
 ---
 
 ## Desktop Application (`chitauri.exe`)
 
-The desktop client is a standalone Windows executable engineered to provide identical visual design, audio features, and operational workflows as the Android mobile client.
+The desktop client is a standalone Windows executable engineered to provide a widescreen desktop experience with full YouTube search, 320kbps MP3 downloading, offline library management, and turntable playback.
 
-### Executable Information
+### Executable Specifications
 - **File Name:** `chitauri.exe`
 - **Location:** Repository root (`./chitauri.exe`)
-- **Binary Size:** ~12.9 MB (Standalone single-file executable)
+- **Binary Size:** ~19.6 MB (Single-file standalone Windows executable)
+- **Architecture:** x86_64 Windows PE executable
 - **GUI Engine:** Microsoft Edge Chromium WebView2 Runtime (Hardware Accelerated 60 FPS)
 - **Audio Subsystem:** HTML5 Audio Engine with local HTTP 206 Partial Content range seeking
-- **Backend Extractor:** Integrated yt-dlp & FFmpeg audio pipeline (100% reliable YouTube search & download)
+- **Visualizer Engine:** Web Audio API AnalyserNode with 36-frequency-bin spectrum canvas
+- **Backend Extractor:** Integrated yt-dlp & FFmpeg 320kbps MP3 audio pipeline
 - **Storage Directory:** `%USERPROFILE%\Music\ChitauriMusic\` protected by `.nomedia` sentinel
 
 ### Key Features of the Windows Desktop Application
-1. **Search & One-Tap Grab:** Instantaneous YouTube search with high-resolution thumbnails, channel titles, durations, and quick filter chips.
-2. **Real Audio Extraction:** Downloads genuine MP3 audio streams at highest bitrate with embedded artwork and ID3 metadata tags.
-3. **Duplicate Resolution:** Automatically detects existing tracks and prompts whether to skip or create an indexed duplicate.
-4. **Offline Library Management:** Real-time track catalog, duration tracking, instant playback, and disk removal.
-5. **Interactive Vinyl Turntable Player:** Smooth rotating vinyl disc synchronized to playback state, turntable needle, time scrubber, volume bar, Fisher-Yates shuffle (current song pinned), and 3-state repeat mode.
-6. **Device & Storage Profile:** Live storage tracking (total tracks and megabytes saved) and direct shortcut to open the isolated music directory in Windows File Explorer.
+1. **Widescreen Desktop Layout (1260x820):** Left sidebar navigation, responsive YouTube card grid, quick genre filter chips, and full-width bottom audio control bar.
+2. **Search & Instant Grab:** Instantaneous YouTube search returning high-resolution thumbnails, channel titles, durations, and download buttons.
+3. **Real Audio Extraction:** Downloads genuine MP3 audio streams at highest bitrate with embedded artwork and ID3 metadata tags.
+4. **Duplicate Resolution:** Automatically detects existing tracks and prompts whether to skip or create an indexed duplicate.
+5. **Offline Library Management:** Tabular track catalog with column sorting, file size metrics, format tags, instant playback, and disk removal.
+6. **Active Download Queue:** Real-time download manager view showing active percentage progress bars, download speeds, and conversion stages.
+7. **Vinyl Turntable Studio:** Rotating vinyl disc synchronized to playback state (33 RPM), mechanical tonearm that lowers onto the vinyl when playing, and a live 36-band audio spectrum analyzer.
+8. **Storage Vault & .nomedia:** Live storage statistics and direct shortcut to open the isolated music directory in Windows File Explorer.
 
 ### Running the Desktop Application
 To launch the pre-built desktop application directly on Windows:
@@ -219,9 +249,9 @@ To launch the pre-built desktop application directly on Windows:
 
 To run from source:
 ```powershell
-python -m venv env
-.\env\Scripts\activate
-pip install pywebview pyinstaller
+python -m venv app_venv
+.\app_venv\Scripts\activate
+pip install pywebview pyinstaller yt-dlp
 python desktop_app\app.py
 ```
 
@@ -266,10 +296,10 @@ Chitauri/
 |-- assets/
 |   +-- logo.png                        # Application branding logo
 |-- build_apk.ps1                       # Android APK compilation automation script
-|-- chitauri.exe                        # Standalone Windows desktop application (12.9 MB)
+|-- chitauri.exe                        # Standalone Windows desktop application (19.6 MB)
 |-- desktop_app/                        # Windows Desktop Application source
 |   |-- app.py                          # Desktop controller & extraction bridge
-|   +-- index.html                      # Desktop UI & interactive vinyl player
+|   +-- index.html                      # Widescreen desktop UI & vinyl turntable studio
 |-- chitauri_flutter/                   # Android Mobile Application codebase
 |   |-- android/
 |   |   |-- app/
@@ -297,19 +327,13 @@ Chitauri/
 |   |       +-- vinyl_player_sheet.dart         # Fullscreen turntable player sheet
 |   +-- pubspec.yaml
 |-- res/                                # Android launcher icon mipmaps
-|-- src/                                # Pure Rust Desktop Core
-|   |-- app.rs                          # eframe GUI state loop
-|   |-- downloader.rs                   # Chunked network download pipeline
-|   |-- innertube.rs                    # InnerTube search and player protocol
-|   |-- lib.rs                          # Library exports
-|   |-- main.rs                         # Desktop application entrypoint
-|   |-- models.rs                       # Shared data structs and event enums
-|   |-- player.rs                       # Rodio audio sink & dual-queue machine
-|   |-- storage.rs                      # .nomedia sentinel & local storage engine
-|   +-- ui/                             # Desktop egui modular interface components
-+-- tests/
-    |-- player_state_test.rs            # Shuffle, repeat, and queue unit tests
-    +-- storage_isolation_test.rs       # .nomedia sentinel enforcement tests
+|-- screenshot_desktop_search.png       # Desktop search & explore grid screenshot
+|-- screenshot_desktop_library.png      # Desktop offline vault table screenshot
+|-- screenshot_desktop_player.png       # Desktop vinyl turntable & spectrum screenshot
+|-- screenshot_1_search.png             # Android search & feed screenshot
+|-- screenshot_2_library.png            # Android offline library screenshot
+|-- screenshot_3_player.png             # Android vinyl player screenshot
++-- screenshot_4_profile.png            # Android device profile & storage screenshot
 ```
 
 ---
@@ -321,7 +345,7 @@ Chitauri/
 | **Backend Dependency** | **Zero (Client-side direct)** | Proprietary cloud infrastructure | Intermediate proxy servers |
 | **Storage Isolation** | **Strict (`.nomedia` protocol)** | Mixed in system media storage | Inaccessible or unmanaged |
 | **Video Decoding Overhead** | **0% (Pure audio streams)** | Full video rendering pipeline | Chromium DOM video rendering |
-| **Memory Consumption** | **~18 MB (Rust) / ~45 MB (Flutter)** | 120 MB - 250 MB | 300 MB - 600 MB |
+| **Memory Consumption** | **~25 MB (Desktop) / ~45 MB (Flutter)** | 120 MB - 250 MB | 300 MB - 600 MB |
 | **Playback Queue Safety** | **Deterministic dual-queue** | Cloud session dependent | Volatile in-memory arrays |
 | **Offline Availability** | **Complete (Zero network required)** | DRM cached or blocked | Unusable offline |
 

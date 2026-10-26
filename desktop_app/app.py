@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import shutil
+import base64
 import urllib.parse
 import threading
 import subprocess
@@ -10,12 +11,19 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import webview
 
-# 1. Determine storage directories
+# Optional direct yt_dlp import
+try:
+    import yt_dlp
+    HAS_YTDLP_MODULE = True
+except ImportError:
+    HAS_YTDLP_MODULE = False
+
+# 1. Directories and Storage Isolation
 USER_HOME = Path.home()
 MUSIC_DIR = USER_HOME / "Music" / "ChitauriMusic"
 MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 
-# 2. Enforce .nomedia sentinel for storage isolation
+# Sentinel for storage isolation
 NOMEDIA_SENTINEL = MUSIC_DIR / ".nomedia"
 if not NOMEDIA_SENTINEL.exists():
     try:
@@ -28,20 +36,17 @@ if not CATALOG_FILE.exists():
     with open(CATALOG_FILE, "w", encoding="utf-8") as f:
         json.dump([], f)
 
-# 3. Locate yt-dlp & ffmpeg
+# 2. Locate yt-dlp & ffmpeg binaries for fallback / fast execution
 def find_binary(name):
-    # Check bundled PyInstaller temporary folder first
     if hasattr(sys, "_MEIPASS"):
         bundled = Path(sys._MEIPASS) / f"{name}.exe"
         if bundled.exists():
             return str(bundled)
 
-    # Check PATH
     found = shutil.which(name)
     if found:
         return found
 
-    # Check common WinGet install locations
     winget_paths = list(Path.home().glob(f"AppData/Local/Microsoft/WinGet/Packages/*/{name}.exe")) + \
                    list(Path.home().glob(f"AppData/Local/Microsoft/WinGet/Packages/*/*/{name}.exe")) + \
                    list(Path.home().glob(f"AppData/Local/Microsoft/WinGet/Packages/*/*/*/{name}.exe"))
@@ -53,30 +58,25 @@ def find_binary(name):
 YTDLP_BIN = find_binary("yt-dlp")
 FFMPEG_BIN = find_binary("ffmpeg")
 
-# 4. Range-supporting HTTP Server for HTML5 Audio Streaming
-class ChitauriHTTPHandler(SimpleHTTPRequestHandler):
-    def translate_path(self, path):
-        # Serve /stream/<filename> from MUSIC_DIR
-        parsed = urllib.parse.urlparse(path)
-        clean_path = urllib.parse.unquote(parsed.path)
+# Global Download Manager State
+ACTIVE_DOWNLOADS = {}
+DOWNLOAD_LOCK = threading.Lock()
+ACTIVE_SERVER_PORT = 0
 
-        if clean_path.startswith("/stream/"):
-            rel_name = clean_path[len("/stream/"):]
-            return str(MUSIC_DIR / rel_name)
+def format_duration(seconds):
+    try:
+        sec = int(seconds)
+        m = sec // 60
+        s = sec % 60
+        return f"{m}:{s:02d}"
+    except Exception:
+        return "3:30"
 
-        # Serve frontend files from directory of index.html
-        base_dir = Path(__file__).parent.resolve()
-        if hasattr(sys, "_MEIPASS"):
-            base_dir = Path(sys._MEIPASS).resolve()
-
-        if clean_path in ("/", "/index.html"):
-            return str(base_dir / "index.html")
-
-        return str(base_dir / clean_path.lstrip("/"))
-
+# 3. Custom REST & Range-supporting HTTP Server
+class ChitauriDesktopServer(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Range, Content-Type")
         super().end_headers()
 
@@ -84,69 +84,224 @@ class ChitauriHTTPHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-    def log_message(self, format, *args):
-        # Suppress verbose server log output
-        pass
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
 
-def start_http_server():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), ChitauriHTTPHandler)
-    port = server.server_port
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return f"http://127.0.0.1:{port}"
+        # REST API: Search
+        if path == "/api/search":
+            q = query.get("q", [""])[0].strip()
+            results = perform_search(q)
+            self._send_json(results)
+            return
 
-# 5. Core JS API Bridge
-class ChitauriAPI:
-    def __init__(self, window, server_url):
-        self.window = window
-        self.server_url = server_url
+        # REST API: Library
+        if path == "/api/library":
+            lib = get_library_catalog()
+            self._send_json(lib)
+            return
 
-    def search(self, query):
-        trimmed = query.strip()
-        if not trimmed:
-            return []
+        # REST API: Active Downloads
+        if path == "/api/downloads/status":
+            with DOWNLOAD_LOCK:
+                items = list(ACTIVE_DOWNLOADS.values())
+            self._send_json({"downloads": items})
+            return
 
-        cmd = [
-            YTDLP_BIN,
-            f"ytsearch12:{trimmed}",
-            "--dump-json",
-            "--flat-playlist",
-            "--no-warnings"
-        ]
+        # REST API: Storage Stats
+        if path == "/api/stats":
+            stats = compute_storage_stats()
+            self._send_json(stats)
+            return
+
+        # Stream audio from MUSIC_DIR
+        if path.startswith("/stream/"):
+            rel_name = urllib.parse.unquote(path[len("/stream/"):])
+            file_path = MUSIC_DIR / rel_name
+            if not file_path.exists() or not file_path.is_file():
+                self.send_error(404, "Audio file not found")
+                return
+            self._serve_audio_file(file_path)
+            return
+
+        # Serve static frontend files
+        base_dir = Path(__file__).parent.resolve()
+        if hasattr(sys, "_MEIPASS"):
+            base_dir = Path(sys._MEIPASS).resolve()
+
+        if path in ("/", "/index.html"):
+            index_path = base_dir / "index.html"
+            if not index_path.exists():
+                index_path = base_dir / "desktop_app" / "index.html"
+            if index_path.exists():
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                data = index_path.read_bytes()
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+        return super().do_GET()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+        try:
+            payload = json.loads(post_data.decode("utf-8"))
+        except Exception:
+            payload = {}
+
+        if path == "/api/download":
+            video_id = payload.get("id", "")
+            title = payload.get("title", "")
+            channel = payload.get("channel", "")
+            thumbnail = payload.get("thumbnail", "")
+            is_duplicate = payload.get("is_duplicate", False)
+
+            if not video_id:
+                self._send_json({"error": "Missing video id"}, status=400)
+                return
+
+            trigger_download(video_id, title, channel, thumbnail, is_duplicate)
+            self._send_json({"status": "started", "id": video_id})
+            return
+
+        if path == "/api/delete":
+            track_id = payload.get("id", "")
+            updated_lib = delete_track_record(track_id)
+            self._send_json(updated_lib)
+            return
+
+        if path == "/api/open_folder":
+            if os.name == "nt":
+                os.startfile(str(MUSIC_DIR))
+            self._send_json({"status": "opened", "path": str(MUSIC_DIR)})
+            return
+
+        if path == "/api/save_screenshot":
+            name = payload.get("name", "screenshot.png")
+            data_str = payload.get("data", "")
+            if "," in data_str:
+                data_str = data_str.split(",", 1)[1]
+            try:
+                img_bytes = base64.b64decode(data_str)
+                # Save to workspace root directory
+                target_path = Path(__file__).resolve().parent.parent / name
+                target_path.write_bytes(img_bytes)
+                print(f"Screenshot saved successfully: {target_path} ({len(img_bytes)} bytes)")
+                self._send_json({"status": "saved", "path": str(target_path)})
+            except Exception as e:
+                print(f"Failed to save screenshot: {e}")
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        self.send_error(404, "Not Found")
+
+    def _send_json(self, data, status=200):
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_audio_file(self, file_path):
+        size = file_path.stat().st_size
+        range_header = self.headers.get("Range")
+
+        ext = file_path.suffix.lower()
+        content_type = "audio/mpeg" if ext == ".mp3" else ("audio/mp4" if ext == ".m4a" else "audio/ogg")
+
+        if not range_header:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(size))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            with open(file_path, "rb") as f:
+                shutil.copyfileobj(f, self.wfile)
+            return
 
         try:
-            startupinfo = None
-            if os.name == "nt":
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            parts = range_header.strip().replace("bytes=", "").split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if parts[1] else size - 1
+            if end >= size:
+                end = size - 1
+            length = end - start + 1
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                startupinfo=startupinfo
-            )
-            stdout, _ = process.communicate(timeout=25)
+            self.send_response(206)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Content-Length", str(length))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
 
-            results = []
-            for line in stdout.strip().split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    v_id = data.get("id") or ""
-                    title = data.get("title") or "Unknown Title"
-                    channel = data.get("channel") or data.get("uploader") or "Artist"
-                    duration = data.get("duration") or 180
-                    duration_str = data.get("duration_string") or f"{int(duration)//60}:{int(duration)%60:02d}"
+            with open(file_path, "rb") as f:
+                f.seek(start)
+                remaining = length
+                chunk_size = 64 * 1024
+                while remaining > 0:
+                    read_len = min(chunk_size, remaining)
+                    chunk = f.read(read_len)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except Exception:
+            pass
 
-                    # Pick best thumbnail
-                    thumbs = data.get("thumbnails") or []
-                    thumbnail_url = thumbs[-1].get("url") if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
+    def translate_path(self, path):
+        # Override translate_path to serve frontend files
+        base_dir = Path(__file__).parent.resolve()
+        if hasattr(sys, "_MEIPASS"):
+            base_dir = Path(sys._MEIPASS).resolve()
+        clean_path = urllib.parse.unquote(urllib.parse.urlparse(path).path).lstrip("/")
+        target = base_dir / clean_path
+        if not target.exists() and (base_dir / "desktop_app" / clean_path).exists():
+            return str(base_dir / "desktop_app" / clean_path)
+        return str(target)
+
+    def log_message(self, format, *args):
+        # Silence verbose request logs
+        pass
+
+
+# 4. Search Implementation (High resilience: yt_dlp python module or yt-dlp CLI)
+def perform_search(query):
+    if not query:
+        return []
+
+    # Priority 1: Direct yt_dlp Python module
+    if HAS_YTDLP_MODULE:
+        try:
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": True,
+                "skip_download": True,
+                "default_search": "ytsearch14"
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                res = ydl.extract_info(f"ytsearch14:{query}", download=False)
+                entries = res.get("entries", [])
+                results = []
+                for item in entries:
+                    if not item:
+                        continue
+                    v_id = item.get("id") or ""
+                    title = item.get("title") or "Unknown Track"
+                    channel = item.get("channel") or item.get("uploader") or "Artist"
+                    duration = item.get("duration") or 180
+                    duration_str = item.get("duration_string") or format_duration(duration)
+
+                    thumbs = item.get("thumbnails") or []
+                    thumb_url = thumbs[-1].get("url") if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
                     results.append({
                         "id": v_id,
@@ -154,217 +309,345 @@ class ChitauriAPI:
                         "channel": channel,
                         "duration": duration,
                         "duration_string": duration_str,
-                        "thumbnail": thumbnail_url
+                        "thumbnail": thumb_url
                     })
-                except Exception:
-                    continue
-
-            return results
+                if results:
+                    return results
         except Exception as e:
-            print(f"Search exception: {e}")
-            return []
+            print(f"yt_dlp module search error: {e}")
 
-    def download(self, video_id, title, channel, thumbnail_url, is_duplicate=False):
-        thread = threading.Thread(
-            target=self._download_worker,
-            args=(video_id, title, channel, thumbnail_url, is_duplicate),
-            daemon=True
-        )
-        thread.start()
-        return {"status": "started"}
-
-    def _download_worker(self, video_id, title, channel, thumbnail_url, is_duplicate):
-        # Sanitize filename
-        safe_title = "".join(c for c in title if c not in '<>:"/\\|?*').strip()
-        if not safe_title:
-            safe_title = f"Chitauri_{video_id}"
-
-        if is_duplicate:
-            # Find next free duplicate index
-            idx = 2
-            while (MUSIC_DIR / f"{safe_title} ({idx}).mp3").exists():
-                idx += 1
-            out_filename = f"{safe_title} ({idx}).mp3"
-        else:
-            out_filename = f"{safe_title}.mp3"
-
-        out_template = str(MUSIC_DIR / (out_filename[:-4] + ".%(ext)s"))
-
+    # Priority 2: yt-dlp CLI fallback
+    try:
         cmd = [
             YTDLP_BIN,
-            "-x",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "--newline",
-            "--no-warnings",
-            "--embed-thumbnail",
-            "--add-metadata",
-            "-o", out_template,
-            f"https://www.youtube.com/watch?v={video_id}"
+            f"ytsearch14:{query}",
+            "--dump-json",
+            "--flat-playlist",
+            "--no-warnings"
         ]
-
-        if FFMPEG_BIN:
-            cmd.extend(["--ffmpeg-location", FFMPEG_BIN])
-
         startupinfo = None
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                startupinfo=startupinfo
-            )
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            startupinfo=startupinfo
+        )
+        stdout, _ = proc.communicate(timeout=25)
+        results = []
+        for line in stdout.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                v_id = data.get("id") or ""
+                title = data.get("title") or "Unknown Track"
+                channel = data.get("channel") or data.get("uploader") or "Artist"
+                duration = data.get("duration") or 180
+                duration_str = data.get("duration_string") or format_duration(duration)
 
-            # Read progress line by line
-            percent = 10
-            for line in process.stdout:
-                line = line.strip()
-                if "[download]" in line and "%" in line:
-                    try:
-                        parts = line.split("%")[0].split()
-                        val = float(parts[-1])
-                        # Map yt-dlp download percentage 0-100 to 10-85% overall
-                        p = 10.0 + (val * 0.75)
-                        if self.window:
-                            self.window.evaluate_js(f"window.onDownloadProgress('{video_id}', {p})")
-                    except Exception:
-                        pass
-                elif "[ExtractAudio]" in line or "[ffmpeg]" in line:
-                    if self.window:
-                        self.window.evaluate_js(f"window.onDownloadProgress('{video_id}', 90)")
+                thumbs = data.get("thumbnails") or []
+                thumb_url = thumbs[-1].get("url") if thumbs else f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg"
 
-            process.wait()
+                results.append({
+                    "id": v_id,
+                    "title": title,
+                    "channel": channel,
+                    "duration": duration,
+                    "duration_string": duration_str,
+                    "thumbnail": thumb_url
+                })
+            except Exception:
+                continue
+        return results
+    except Exception as e:
+        print(f"CLI search exception: {e}")
+        return []
 
-            # Verify output file
-            final_path = MUSIC_DIR / out_filename
-            if not final_path.exists():
-                # Check if file has m4a, opus or other extension
-                stem = out_filename[:-4]
-                matching = list(MUSIC_DIR.glob(f"{stem}.*"))
-                if matching and not matching[0].name.endswith(".nomedia"):
-                    final_path = matching[0]
-                    out_filename = final_path.name
 
-            # Add to tracks_catalog.json
-            track_record = {
-                "id": video_id,
-                "title": safe_title,
-                "artist": channel,
-                "duration": 180,
-                "filename": out_filename,
-                "thumbnail": thumbnail_url,
-                "timestamp": int(time.time()),
-                "stream_url": f"{self.server_url}/stream/{urllib.parse.quote(out_filename)}"
-            }
+# 5. Background Downloader
+def trigger_download(video_id, title, channel, thumbnail, is_duplicate=False):
+    t = threading.Thread(
+        target=_download_worker,
+        args=(video_id, title, channel, thumbnail, is_duplicate),
+        daemon=True
+    )
+    t.start()
 
-            self._save_track_to_catalog(track_record)
+def _download_worker(video_id, title, channel, thumbnail, is_duplicate):
+    safe_title = "".join(c for c in title if c not in '<>:"/\\|?*').strip()
+    if not safe_title:
+        safe_title = f"Chitauri_{video_id}"
 
-            if self.window:
-                self.window.evaluate_js(f"window.onDownloadProgress('{video_id}', 100)")
-                self.window.evaluate_js(f"window.onDownloadComplete({json.dumps(track_record)})")
+    if is_duplicate:
+        idx = 2
+        while (MUSIC_DIR / f"{safe_title} ({idx}).mp3").exists():
+            idx += 1
+        out_filename = f"{safe_title} ({idx}).mp3"
+    else:
+        out_filename = f"{safe_title}.mp3"
 
-        except Exception as e:
-            print(f"Download exception: {e}")
-
-    def _save_track_to_catalog(self, track_record):
-        try:
-            with open(CATALOG_FILE, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
-        except Exception:
-            catalog = []
-
-        # Remove duplicate entry if present
-        catalog = [t for t in catalog if t.get("filename") != track_record.get("filename")]
-        catalog.append(track_record)
-
-        with open(CATALOG_FILE, "w", encoding="utf-8") as f:
-            json.dump(catalog, f, indent=2)
-
-    def get_library(self):
-        try:
-            with open(CATALOG_FILE, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
-        except Exception:
-            catalog = []
-
-        # Refresh stream_url with current active server port
-        for t in catalog:
-            fn = t.get("filename") or ""
-            t["stream_url"] = f"{self.server_url}/stream/{urllib.parse.quote(fn)}"
-
-        return catalog
-
-    def delete_track(self, track_id):
-        try:
-            with open(CATALOG_FILE, "r", encoding="utf-8") as f:
-                catalog = json.load(f)
-        except Exception:
-            catalog = []
-
-        new_catalog = []
-        for t in catalog:
-            if t.get("id") == track_id:
-                # Remove physical file
-                fn = t.get("filename")
-                if fn:
-                    fp = MUSIC_DIR / fn
-                    if fp.exists():
-                        try:
-                            fp.unlink()
-                        except Exception as e:
-                            print(f"Could not delete physical file: {e}")
-            else:
-                new_catalog.append(t)
-
-        with open(CATALOG_FILE, "w", encoding="utf-8") as f:
-            json.dump(new_catalog, f, indent=2)
-
-        return self.get_library()
-
-    def get_stats(self):
-        library = self.get_library()
-        total_bytes = 0
-        for item in MUSIC_DIR.glob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                total_bytes += item.stat().st_size
-
-        return {
-            "total_tracks": len(library),
-            "total_size_mb": round(total_bytes / (1024 * 1024), 2),
-            "storage_path": str(MUSIC_DIR)
+    with DOWNLOAD_LOCK:
+        ACTIVE_DOWNLOADS[video_id] = {
+            "id": video_id,
+            "title": safe_title,
+            "artist": channel,
+            "thumbnail": thumbnail,
+            "percent": 5,
+            "status": "Starting download...",
+            "speed": "--"
         }
 
-    def get_audio_url(self, filename):
-        return f"{self.server_url}/stream/{urllib.parse.quote(filename)}"
+    out_template = str(MUSIC_DIR / (out_filename[:-4] + ".%(ext)s"))
 
-    def open_storage_folder(self):
-        if os.name == "nt":
-            os.startfile(str(MUSIC_DIR))
-        return True
+    # Download using yt-dlp CLI for maximum reliability with ffmpeg conversion
+    cmd = [
+        YTDLP_BIN,
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
+        "--newline",
+        "--no-warnings",
+        "--embed-thumbnail",
+        "--add-metadata",
+        "-o", out_template,
+        f"https://www.youtube.com/watch?v={video_id}"
+    ]
+
+    if FFMPEG_BIN and Path(FFMPEG_BIN).exists():
+        cmd.extend(["--ffmpeg-location", FFMPEG_BIN])
+
+    startupinfo = None
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            startupinfo=startupinfo
+        )
+
+        for line in proc.stdout:
+            line = line.strip()
+            if "[download]" in line and "%" in line:
+                try:
+                    parts = line.split("%")[0].split()
+                    val = float(parts[-1])
+                    p = min(90.0, 10.0 + (val * 0.75))
+                    with DOWNLOAD_LOCK:
+                        if video_id in ACTIVE_DOWNLOADS:
+                            ACTIVE_DOWNLOADS[video_id]["percent"] = round(p, 1)
+                            ACTIVE_DOWNLOADS[video_id]["status"] = f"Downloading {round(val)}%"
+                            if "at" in line:
+                                speed_part = line.split("at")[-1].split("ETA")[0].strip()
+                                ACTIVE_DOWNLOADS[video_id]["speed"] = speed_part
+                except Exception:
+                    pass
+            elif "[ExtractAudio]" in line or "[ffmpeg]" in line:
+                with DOWNLOAD_LOCK:
+                    if video_id in ACTIVE_DOWNLOADS:
+                        ACTIVE_DOWNLOADS[video_id]["percent"] = 92
+                        ACTIVE_DOWNLOADS[video_id]["status"] = "Converting 320kbps MP3..."
+
+        proc.wait()
+
+        # Check target file
+        final_file = MUSIC_DIR / out_filename
+        if not final_file.exists():
+            stem = out_filename[:-4]
+            candidates = list(MUSIC_DIR.glob(f"{stem}.*"))
+            for c in candidates:
+                if not c.name.endswith(".nomedia") and not c.name.endswith(".json"):
+                    final_file = c
+                    out_filename = c.name
+                    break
+
+        file_size_mb = 0
+        if final_file.exists():
+            file_size_mb = round(final_file.stat().st_size / (1024 * 1024), 2)
+
+        # Catalog record
+        record = {
+            "id": video_id,
+            "title": safe_title,
+            "artist": channel,
+            "duration": 180,
+            "duration_string": "3:00",
+            "filename": out_filename,
+            "filesize_mb": file_size_mb,
+            "thumbnail": thumbnail,
+            "timestamp": int(time.time()),
+            "stream_url": f"http://127.0.0.1:{ACTIVE_SERVER_PORT}/stream/{urllib.parse.quote(out_filename)}"
+        }
+
+        save_to_catalog(record)
+
+        with DOWNLOAD_LOCK:
+            if video_id in ACTIVE_DOWNLOADS:
+                ACTIVE_DOWNLOADS[video_id]["percent"] = 100
+                ACTIVE_DOWNLOADS[video_id]["status"] = "Completed"
+                ACTIVE_DOWNLOADS[video_id]["speed"] = "Done"
+
+        # Keep completed status for 10 seconds, then clean up
+        def cleanup():
+            time.sleep(12)
+            with DOWNLOAD_LOCK:
+                ACTIVE_DOWNLOADS.pop(video_id, None)
+
+        threading.Thread(target=cleanup, daemon=True).start()
+
+    except Exception as e:
+        print(f"Download worker exception: {e}")
+        with DOWNLOAD_LOCK:
+            if video_id in ACTIVE_DOWNLOADS:
+                ACTIVE_DOWNLOADS[video_id]["status"] = f"Failed: {e}"
+                ACTIVE_DOWNLOADS[video_id]["percent"] = 0
 
 
+# 6. Library Management & Synchronization
+def save_to_catalog(record):
+    try:
+        with open(CATALOG_FILE, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+    except Exception:
+        catalog = []
+
+    # Deduplicate by filename
+    catalog = [t for t in catalog if t.get("filename") != record.get("filename")]
+    catalog.insert(0, record)
+
+    with open(CATALOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(catalog, f, indent=2)
+
+def get_library_catalog():
+    try:
+        with open(CATALOG_FILE, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+    except Exception:
+        catalog = []
+
+    # Reconcile disk files
+    active_files = {}
+    for p in MUSIC_DIR.glob("*"):
+        if p.is_file() and not p.name.startswith("."):
+            active_files[p.name] = p
+
+    # Remove non-existent entries
+    valid_catalog = []
+    seen_files = set()
+    for item in catalog:
+        fn = item.get("filename")
+        if fn in active_files:
+            file_obj = active_files[fn]
+            item["filesize_mb"] = round(file_obj.stat().st_size / (1024 * 1024), 2)
+            item["stream_url"] = f"http://127.0.0.1:{ACTIVE_SERVER_PORT}/stream/{urllib.parse.quote(fn)}"
+            valid_catalog.append(item)
+            seen_files.add(fn)
+
+    # Add any loose audio files not in catalog
+    for fn, file_obj in active_files.items():
+        if fn not in seen_files and fn != "tracks_catalog.json":
+            stem = file_obj.stem
+            size_mb = round(file_obj.stat().st_size / (1024 * 1024), 2)
+            new_item = {
+                "id": f"local_{int(time.time())}_{fn[:8]}",
+                "title": stem,
+                "artist": "Local Offline",
+                "duration": 180,
+                "duration_string": "3:00",
+                "filename": fn,
+                "filesize_mb": size_mb,
+                "thumbnail": "",
+                "timestamp": int(file_obj.stat().st_mtime),
+                "stream_url": f"http://127.0.0.1:{ACTIVE_SERVER_PORT}/stream/{urllib.parse.quote(fn)}"
+            }
+            valid_catalog.append(new_item)
+
+    # Save reconciled catalog
+    with open(CATALOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(valid_catalog, f, indent=2)
+
+    return valid_catalog
+
+def delete_track_record(track_id):
+    try:
+        with open(CATALOG_FILE, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+    except Exception:
+        catalog = []
+
+    remaining = []
+    for item in catalog:
+        if item.get("id") == track_id:
+            fn = item.get("filename")
+            if fn:
+                p = MUSIC_DIR / fn
+                if p.exists():
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        print(f"Could not unlink {p}: {e}")
+        else:
+            remaining.append(item)
+
+    with open(CATALOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(remaining, f, indent=2)
+
+    return get_library_catalog()
+
+def compute_storage_stats():
+    lib = get_library_catalog()
+    total_bytes = 0
+    for p in MUSIC_DIR.glob("*"):
+        if p.is_file() and not p.name.startswith("."):
+            total_bytes += p.stat().st_size
+
+    return {
+        "total_tracks": len(lib),
+        "total_size_mb": round(total_bytes / (1024 * 1024), 2),
+        "storage_path": str(MUSIC_DIR),
+        "nomedia_active": NOMEDIA_SENTINEL.exists()
+    }
+
+
+# 7. Start HTTP Server
+def start_server():
+    global ACTIVE_SERVER_PORT
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ChitauriDesktopServer)
+    ACTIVE_SERVER_PORT = server.server_port
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    return f"http://127.0.0.1:{ACTIVE_SERVER_PORT}"
+
+
+# 8. Main Entrypoint
 def main():
-    server_url = start_http_server()
-    api = ChitauriAPI(None, server_url)
+    server_url = start_server()
+    print(f"Chitauri Desktop Server running on {server_url}")
 
+    # Launch Desktop window (1260x820 widescreen layout)
     window = webview.create_window(
-        title="Chitauri Audio Suite",
+        title="Chitauri Desktop Audio Suite",
         url=f"{server_url}/index.html",
-        js_api=api,
-        width=440,
-        height=880,
-        min_size=(380, 600),
+        width=1260,
+        height=820,
+        min_size=(960, 620),
         resizable=True,
-        background_color="#131315"
+        background_color="#0c0d12"
     )
-    api.window = window
 
     webview.start(debug=False)
 
