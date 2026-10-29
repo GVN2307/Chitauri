@@ -629,6 +629,12 @@ class YouTubeWebViewPageState extends State<YouTubeWebViewPage> {
     query = query.trim();
     if (query.isEmpty) return;
 
+    final playlistId = YouTubeService.instance.extractPlaylistId(query);
+    if (playlistId != null && (query.contains('list=') || query.contains('playlist'))) {
+      _triggerPlaylistDownload(playlistId, playlistUrl: query);
+      return;
+    }
+
     final videoId = YouTubeService.instance.extractVideoId(query);
     if (videoId != null) {
       controller.loadRequest(Uri.parse('https://m.youtube.com/watch?v=$videoId'));

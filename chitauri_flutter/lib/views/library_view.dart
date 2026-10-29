@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/track.dart';
 import '../services/audio_player_service.dart';
 import '../services/storage_service.dart';
 import '../theme/pulse_theme.dart';
 import '../widgets/track_artwork.dart';
+
+enum LibraryViewMode { list, grid }
+
+enum LibrarySortOption {
+  dateNewest,
+  dateOldest,
+  titleAsc,
+  titleDesc,
+  yearOrDuration,
+}
 
 class LibraryView extends StatefulWidget {
   final List<Track> tracks;
@@ -31,12 +42,27 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
   Playlist? _selectedPlaylist;
   bool _isSelectionMode = false;
   final Set<String> _selectedTrackIds = {};
+  LibraryViewMode _viewMode = LibraryViewMode.grid;
+  LibrarySortOption _sortOption = LibrarySortOption.dateNewest;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadViewPreferences();
     _loadPlaylistsAndFavorites();
+  }
+
+  Future<void> _loadViewPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mode = prefs.getString('library_view_mode');
+      if (mode == 'list') {
+        if (mounted) setState(() => _viewMode = LibraryViewMode.list);
+      } else if (mode == 'grid') {
+        if (mounted) setState(() => _viewMode = LibraryViewMode.grid);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -390,16 +416,36 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
     );
   }
 
+  List<Track> _applySort(List<Track> tracks) {
+    final list = List<Track>.from(tracks);
+    switch (_sortOption) {
+      case LibrarySortOption.dateNewest:
+        break;
+      case LibrarySortOption.dateOldest:
+        return list.reversed.toList();
+      case LibrarySortOption.titleAsc:
+        list.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+      case LibrarySortOption.titleDesc:
+        list.sort((a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase()));
+        break;
+      case LibrarySortOption.yearOrDuration:
+        list.sort((a, b) => b.durationSecs.compareTo(a.durationSecs));
+        break;
+    }
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_selectedPlaylist != null) {
       return _buildPlaylistDetailView(_selectedPlaylist!);
     }
 
-    final filteredTracks = widget.tracks.where((t) {
+    final filteredTracks = _applySort(widget.tracks.where((t) {
       final q = _searchFilter.text.toLowerCase();
       return t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q);
-    }).toList();
+    }).toList());
 
     final userPlaylists = _playlists.where((p) => p.id != 'favorites').toList();
 
@@ -480,7 +526,52 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
                   ),
                 ),
                 if (widget.tracks.isNotEmpty) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(
+                      _viewMode == LibraryViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                      color: PulseColors.primaryMint,
+                      size: 22,
+                    ),
+                    tooltip: _viewMode == LibraryViewMode.grid ? 'Switch to List View' : 'Switch to Square Grid',
+                    onPressed: () {
+                      setState(() {
+                        _viewMode = _viewMode == LibraryViewMode.grid ? LibraryViewMode.list : LibraryViewMode.grid;
+                      });
+                      SharedPreferences.getInstance().then(
+                        (p) => p.setString('library_view_mode', _viewMode == LibraryViewMode.grid ? 'grid' : 'list'),
+                      );
+                    },
+                  ),
+                  PopupMenuButton<LibrarySortOption>(
+                    icon: const Icon(Icons.sort_rounded, color: PulseColors.primaryMint, size: 22),
+                    tooltip: 'Sort Tracks',
+                    color: PulseColors.surfaceContainerHigh,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onSelected: (opt) => setState(() => _sortOption = opt),
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(
+                        value: LibrarySortOption.dateNewest,
+                        child: Text('Date Downloaded (Newest)', style: TextStyle(color: PulseColors.textWhite, fontSize: 13)),
+                      ),
+                      const PopupMenuItem(
+                        value: LibrarySortOption.dateOldest,
+                        child: Text('Date Downloaded (Oldest)', style: TextStyle(color: PulseColors.textWhite, fontSize: 13)),
+                      ),
+                      const PopupMenuItem(
+                        value: LibrarySortOption.titleAsc,
+                        child: Text('Song Title (A–Z)', style: TextStyle(color: PulseColors.textWhite, fontSize: 13)),
+                      ),
+                      const PopupMenuItem(
+                        value: LibrarySortOption.titleDesc,
+                        child: Text('Song Title (Z–A)', style: TextStyle(color: PulseColors.textWhite, fontSize: 13)),
+                      ),
+                      const PopupMenuItem(
+                        value: LibrarySortOption.yearOrDuration,
+                        child: Text('Duration / Length', style: TextStyle(color: PulseColors.textWhite, fontSize: 13)),
+                      ),
+                    ],
+                  ),
                   IconButton(
                     icon: const Icon(Icons.checklist, color: PulseColors.primaryMint),
                     tooltip: 'Select Multiple',
@@ -578,138 +669,364 @@ class _LibraryViewState extends State<LibraryView> with SingleTickerProviderStat
       builder: (context, trackSnapshot) {
         final currentTrack = trackSnapshot.data;
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            widget.onRefresh();
-            await _loadPlaylistsAndFavorites();
-          },
-          color: PulseColors.primaryMint,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: tracks.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final track = tracks[index];
-              final isCurrent = currentTrack?.id == track.id;
-              final isFav = _favoriteTracks.any((f) => f.id == track.id);
-              final isSelected = _selectedTrackIds.contains(track.id);
+        if (_viewMode == LibraryViewMode.grid) {
+          return _buildTracksGrid(tracks, currentTrack, player);
+        }
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? PulseColors.primaryMint.withOpacity(0.15)
-                      : (isCurrent ? PulseColors.surfaceContainerHigh : PulseColors.surfaceContainer),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected
-                        ? PulseColors.primaryMint
-                        : (isCurrent ? PulseColors.primaryMint.withOpacity(0.6) : const Color(0x1AFFFFFF)),
-                    width: (isSelected || isCurrent) ? 1.5 : 1.0,
-                  ),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  onTap: () {
-                    if (_isSelectionMode) {
-                      _toggleSelection(track.id);
-                    } else {
-                      player.playTrack(track, tracks);
-                    }
-                  },
-                  onLongPress: () {
-                    if (!_isSelectionMode) {
-                      setState(() {
-                        _isSelectionMode = true;
-                        _selectedTrackIds.add(track.id);
-                      });
-                    }
-                  },
-                  leading: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_isSelectionMode)
-                        Checkbox(
-                          value: isSelected,
-                          activeColor: PulseColors.primaryMint,
-                          onChanged: (_) => _toggleSelection(track.id),
-                        ),
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          TrackArtwork(
+        return _buildTracksListView(tracks, currentTrack, player);
+      },
+    );
+  }
+
+  Widget _buildTracksGrid(
+    List<Track> tracks,
+    Track? currentTrack,
+    AudioPlayerService player,
+  ) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        widget.onRefresh();
+        await _loadPlaylistsAndFavorites();
+      },
+      color: PulseColors.primaryMint,
+      child: GridView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.74,
+        ),
+        itemCount: tracks.length,
+        itemBuilder: (context, index) {
+          final track = tracks[index];
+          final isCurrent = currentTrack?.id == track.id;
+          final isFav = _favoriteTracks.any((f) => f.id == track.id);
+          final isSelected = _selectedTrackIds.contains(track.id);
+
+          return Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? PulseColors.primaryMint.withOpacity(0.15)
+                  : (isCurrent ? PulseColors.surfaceContainerHigh : PulseColors.cardSurface),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected
+                    ? PulseColors.primaryMint
+                    : (isCurrent ? PulseColors.primaryMint.withOpacity(0.8) : PulseColors.cardBorder),
+                width: (isSelected || isCurrent) ? 1.5 : 1.0,
+              ),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {
+                if (_isSelectionMode) {
+                  _toggleSelection(track.id);
+                } else {
+                  player.playTrack(track, tracks);
+                }
+              },
+              onLongPress: () {
+                if (!_isSelectionMode) {
+                  setState(() {
+                    _isSelectionMode = true;
+                    _selectedTrackIds.add(track.id);
+                  });
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ClipRRect(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                          child: TrackArtwork(
                             thumbUrl: track.thumbnailUrl,
-                            width: 48,
-                            height: 48,
-                            borderRadius: 8,
+                            width: double.infinity,
+                            height: double.infinity,
+                            borderRadius: 0,
                             fallback: Container(
                               color: PulseColors.surfaceContainerLowest,
-                              child: const Icon(Icons.music_note, color: PulseColors.primaryMint),
+                              child: const Icon(Icons.music_note, color: PulseColors.primaryMint, size: 36),
                             ),
                           ),
-                          if (isCurrent)
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.55),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.equalizer, color: PulseColors.primaryMint, size: 24),
+                        ),
+                        if (isCurrent)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.4),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  title: Text(
-                    track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isSelected ? PulseColors.primaryMintBright : (isCurrent ? PulseColors.primaryMint : PulseColors.textWhite),
-                      fontWeight: (isSelected || isCurrent) ? FontWeight.bold : FontWeight.w600,
-                      fontSize: 13.5,
+                            child: const Center(
+                              child: Icon(Icons.equalizer, color: PulseColors.primaryMint, size: 32),
+                            ),
+                          ),
+                        if (_isSelectionMode)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Checkbox(
+                              value: isSelected,
+                              activeColor: PulseColors.primaryMint,
+                              onChanged: (_) => _toggleSelection(track.id),
+                            ),
+                          ),
+                        Positioned(
+                          bottom: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: PulseColors.background.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              track.durationFormatted,
+                              style: const TextStyle(color: PulseColors.primaryMint, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  subtitle: Text(
-                    '${track.artist} • ${track.durationFormatted}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: PulseColors.textMuted, fontSize: 11),
-                  ),
-                  trailing: _isSelectionMode
-                      ? null
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                isFav ? Icons.favorite : Icons.favorite_border,
-                                color: isFav ? PulseColors.primaryMint : PulseColors.textMuted,
-                                size: 20,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                track.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? PulseColors.primaryMintBright
+                                      : (isCurrent ? PulseColors.primaryMint : PulseColors.textWhite),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12.5,
+                                ),
                               ),
-                              tooltip: isFav ? 'Remove Favorite' : 'Save Favorite',
-                              onPressed: () async {
+                              const SizedBox(height: 2),
+                              Text(
+                                track.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: PulseColors.textMuted, fontSize: 10.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!_isSelectionMode)
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, color: PulseColors.textMuted, size: 18),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32),
+                            color: PulseColors.surfaceContainerHigh,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            onSelected: (val) async {
+                              if (val == 'fav') {
                                 await StorageService.instance.toggleFavorite(track.id);
                                 _loadPlaylistsAndFavorites();
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                              tooltip: 'Delete Song',
-                              onPressed: () => _confirmDeleteTrack(track),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.more_vert, color: PulseColors.textMuted, size: 20),
-                              onPressed: () => _showTrackOptionsMenu(track),
-                            ),
-                          ],
-                        ),
-                ),
-              );
-            },
-          ),
-        );
+                              } else if (val == 'delete') {
+                                _confirmDeleteTrack(track);
+                              } else if (val == 'more') {
+                                _showTrackOptionsMenu(track);
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              PopupMenuItem(
+                                value: 'fav',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isFav ? Icons.favorite : Icons.favorite_border,
+                                      color: isFav ? PulseColors.primaryMint : PulseColors.textMuted,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isFav ? 'Remove Favorite' : 'Save Favorite',
+                                      style: const TextStyle(color: PulseColors.textWhite, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Delete Song', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'more',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.playlist_add, color: PulseColors.primaryMint, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Add to Playlist...', style: TextStyle(color: PulseColors.textWhite, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTracksListView(
+    List<Track> tracks,
+    Track? currentTrack,
+    AudioPlayerService player,
+  ) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        widget.onRefresh();
+        await _loadPlaylistsAndFavorites();
       },
+      color: PulseColors.primaryMint,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        itemCount: tracks.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final track = tracks[index];
+          final isCurrent = currentTrack?.id == track.id;
+          final isFav = _favoriteTracks.any((f) => f.id == track.id);
+          final isSelected = _selectedTrackIds.contains(track.id);
+
+          return Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? PulseColors.primaryMint.withOpacity(0.15)
+                  : (isCurrent ? PulseColors.surfaceContainerHigh : PulseColors.surfaceContainer),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? PulseColors.primaryMint
+                    : (isCurrent ? PulseColors.primaryMint.withOpacity(0.6) : const Color(0x1AFFFFFF)),
+                width: (isSelected || isCurrent) ? 1.5 : 1.0,
+              ),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              onTap: () {
+                if (_isSelectionMode) {
+                  _toggleSelection(track.id);
+                } else {
+                  player.playTrack(track, tracks);
+                }
+              },
+              onLongPress: () {
+                if (!_isSelectionMode) {
+                  setState(() {
+                    _isSelectionMode = true;
+                    _selectedTrackIds.add(track.id);
+                  });
+                }
+              },
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isSelectionMode)
+                    Checkbox(
+                      value: isSelected,
+                      activeColor: PulseColors.primaryMint,
+                      onChanged: (_) => _toggleSelection(track.id),
+                    ),
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      TrackArtwork(
+                        thumbUrl: track.thumbnailUrl,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 8,
+                        fallback: Container(
+                          color: PulseColors.surfaceContainerLowest,
+                          child: const Icon(Icons.music_note, color: PulseColors.primaryMint),
+                        ),
+                      ),
+                      if (isCurrent)
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.equalizer, color: PulseColors.primaryMint, size: 24),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              title: Text(
+                track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected ? PulseColors.primaryMintBright : (isCurrent ? PulseColors.primaryMint : PulseColors.textWhite),
+                  fontWeight: (isSelected || isCurrent) ? FontWeight.bold : FontWeight.w600,
+                  fontSize: 13.5,
+                ),
+              ),
+              subtitle: Text(
+                '${track.artist} • ${track.durationFormatted}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: PulseColors.textMuted, fontSize: 11),
+              ),
+              trailing: _isSelectionMode
+                  ? null
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            isFav ? Icons.favorite : Icons.favorite_border,
+                            color: isFav ? PulseColors.primaryMint : PulseColors.textMuted,
+                            size: 20,
+                          ),
+                          tooltip: isFav ? 'Remove Favorite' : 'Save Favorite',
+                          onPressed: () async {
+                            await StorageService.instance.toggleFavorite(track.id);
+                            _loadPlaylistsAndFavorites();
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                          tooltip: 'Delete Song',
+                          onPressed: () => _confirmDeleteTrack(track),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.more_vert, color: PulseColors.textMuted, size: 20),
+                          onPressed: () => _showTrackOptionsMenu(track),
+                        ),
+                      ],
+                    ),
+            ),
+          );
+        },
+      ),
     );
   }
 

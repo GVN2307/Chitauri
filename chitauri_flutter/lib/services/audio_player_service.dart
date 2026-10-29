@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import '../models/track.dart';
 import 'storage_service.dart';
+import 'taste_profiler.dart';
 
 class AudioPlayerService {
   static final AudioPlayerService instance = AudioPlayerService._internal();
@@ -192,8 +193,7 @@ class AudioPlayerService {
         if (_duration > Duration.zero && nextPos >= _duration) {
           _position = _duration;
           _positionController.add(_position);
-          _stopTicker();
-          _onTrackComplete();
+          // Do NOT artificially call _onTrackComplete() here! Let hardware _player.onPlayerComplete trigger actual track completion to prevent halfway-skips
         } else {
           _position = nextPos;
           _positionController.add(_position);
@@ -207,10 +207,18 @@ class AudioPlayerService {
     _positionTicker = null;
   }
 
-  void _onTrackComplete() {
+  void _onTrackComplete() async {
     if (_repeatMode == RepeatMode.one) {
-      seek(Duration.zero);
-      play();
+      final cur = currentTrack;
+      if (cur != null) {
+        try {
+          await _player.stop();
+          await _player.play(DeviceFileSource(cur.filePath));
+        } catch (_) {
+          await seek(Duration.zero);
+          await play();
+        }
+      }
     } else {
       next();
     }
@@ -284,6 +292,7 @@ class AudioPlayerService {
       _isPlaying = true;
       _stateController.add(true);
       _startTicker();
+      unawaited(TasteProfiler.instance.recordPlay(track));
     } catch (e) {
       _isPlaying = true;
       _stateController.add(true);

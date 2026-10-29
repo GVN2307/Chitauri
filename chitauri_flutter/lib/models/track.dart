@@ -1,3 +1,5 @@
+import 'telugu_song.dart';
+
 class Track {
   final String id;
   final String title;
@@ -86,6 +88,8 @@ class DownloadTask {
   String statusText;
   String? errorMessage;
   String? localPath;
+  final String? artworkUrl;
+  final TeluguSong? songItem;
   final DateTime createdAt;
 
   DownloadTask({
@@ -98,6 +102,8 @@ class DownloadTask {
     this.statusText = 'Queued',
     this.errorMessage,
     this.localPath,
+    this.artworkUrl,
+    this.songItem,
     DateTime? createdAt,
   })  : pid = pid ?? PidManager.nextPid(),
         createdAt = createdAt ?? DateTime.now();

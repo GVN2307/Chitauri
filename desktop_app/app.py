@@ -528,9 +528,14 @@ def _download_worker(video_id, title, channel, thumbnail, is_duplicate):
     # Download using yt-dlp CLI for maximum reliability with ffmpeg conversion
     cmd = [
         YTDLP_BIN,
+        "--extractor-args", "youtube:player_client=android,ios;player_skip=webpage,configs",
+        "--concurrent-fragments", "4",
+        "--retries", "10",
+        "--fragment-retries", "10",
+        "-f", "ba[ext=m4a]/ba/b",
         "-x",
         "--audio-format", "mp3",
-        "--audio-quality", "0",
+        "--postprocessor-args", "ffmpeg:-threads 4 -b:a 128k -compression_level 9 -write_xing 1",
         "--newline",
         "--no-warnings",
         "--embed-thumbnail",

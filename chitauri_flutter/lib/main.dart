@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'models/track.dart';
 import 'services/storage_service.dart';
+import 'services/taste_profiler.dart';
+import 'services/telugu_catalog_service.dart';
 import 'services/youtube_service.dart';
 import 'theme/pulse_theme.dart';
 import 'views/library_view.dart';
 import 'views/profile_view.dart';
 import 'views/queue_view.dart';
+import 'views/telugu_recommendations_view.dart';
 import 'views/youtube_webview.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/vinyl_player_sheet.dart';
@@ -25,6 +28,8 @@ void main() async {
   // Initialize storage directory and .nomedia sentinel
   final storage = StorageService.instance;
   await storage.ensureNomedia();
+  unawaited(TasteProfiler.instance.initialize());
+  unawaited(TeluguCatalogService.instance.initializeCatalog());
 
   runApp(const ChitauriApp());
 }
@@ -176,33 +181,50 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     try {
-      final downloadedTrack = await YouTubeService.instance.downloadAudio(
-        nextTask.videoId,
-        pid: nextTask.pid,
-        processId: nextTask.processIdentifier,
-        title: nextTask.title,
-        channel: nextTask.channel,
-        onMetadataResolved: (resolvedTitle, resolvedArtist) {
-          if (nextTask!.status != DownloadStatus.cancelled) {
-            nextTask.title = resolvedTitle;
-            nextTask.channel = resolvedArtist;
-            if (mounted) setState(() {});
-          }
-        },
-        onProgress: (p, statusText) {
-          if (nextTask!.status == DownloadStatus.cancelled) return;
-          nextTask.progress = p;
-          nextTask.statusText = statusText;
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (mounted && (now - _lastProgressUpdateMs > 120 || p >= 1.0)) {
-            _lastProgressUpdateMs = now;
-            setState(() {});
-          }
-        },
-      ).timeout(
-        const Duration(minutes: 4),
-        onTimeout: () => throw TimeoutException('Download exceeded maximum safety timeout (4 minutes)'),
-      );
+      Track downloadedTrack;
+      if (nextTask.songItem != null) {
+        downloadedTrack = await YouTubeService.instance.downloadTeluguRecommendation(
+          nextTask.songItem!,
+          onProgress: (p, statusText) {
+            if (nextTask!.status == DownloadStatus.cancelled) return;
+            nextTask.progress = p;
+            nextTask.statusText = statusText;
+            final now = DateTime.now().millisecondsSinceEpoch;
+            if (mounted && (now - _lastProgressUpdateMs > 120 || p >= 1.0)) {
+              _lastProgressUpdateMs = now;
+              setState(() {});
+            }
+          },
+        );
+      } else {
+        downloadedTrack = await YouTubeService.instance.downloadAudio(
+          nextTask.videoId,
+          pid: nextTask.pid,
+          processId: nextTask.processIdentifier,
+          title: nextTask.title,
+          channel: nextTask.channel,
+          onMetadataResolved: (resolvedTitle, resolvedArtist) {
+            if (nextTask!.status != DownloadStatus.cancelled) {
+              nextTask.title = resolvedTitle;
+              nextTask.channel = resolvedArtist;
+              if (mounted) setState(() {});
+            }
+          },
+          onProgress: (p, statusText) {
+            if (nextTask!.status == DownloadStatus.cancelled) return;
+            nextTask.progress = p;
+            nextTask.statusText = statusText;
+            final now = DateTime.now().millisecondsSinceEpoch;
+            if (mounted && (now - _lastProgressUpdateMs > 120 || p >= 1.0)) {
+              _lastProgressUpdateMs = now;
+              setState(() {});
+            }
+          },
+        ).timeout(
+          const Duration(minutes: 4),
+          onTimeout: () => throw TimeoutException('Download exceeded maximum safety timeout (4 minutes)'),
+        );
+      }
 
       if (nextTask.status != DownloadStatus.cancelled) {
         nextTask.title = downloadedTrack.title;
@@ -269,7 +291,7 @@ class _MainScreenState extends State<MainScreen> {
       return;
     }
 
-    if (_currentTabIndex == 0 && _webViewController != null) {
+    if (_currentTabIndex == 1 && _webViewController != null) {
       final canGoBack = await _webViewController!.canGoBack();
       if (canGoBack) {
         await _webViewController!.goBack();
@@ -321,19 +343,29 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     final pages = [
-      // Tab 0: Integrated YouTube Web & Audio Grab
+      // Tab 0 (Default Boot): Recommended For You (Telugu & English)
+      TeluguRecommendationsView(
+        onSwitchToLibrary: () {
+          setState(() {
+            _currentTabIndex = 2; // Switch to Library
+          });
+          _loadTracks();
+        },
+        onStartDownload: _startDownload,
+      ),
+      // Tab 1: Integrated YouTube Web & Audio Grab
       YouTubeWebViewPage(
         onStartDownload: _startDownload,
         onControllerReady: (c) => _webViewController = c,
       ),
-      // Tab 1: Offline Library & Playlists
+      // Tab 2: Offline Library & Playlists
       LibraryView(
         tracks: _tracks,
         onRefresh: _loadTracks,
         onDelete: _deleteTrack,
         onBatchDelete: _deleteTracks,
       ),
-      // Tab 2: Download Queue
+      // Tab 3: Download Queue
       QueueView(
         tasks: _downloadTasks,
         onClearCompleted: () {
@@ -343,7 +375,7 @@ class _MainScreenState extends State<MainScreen> {
         },
         onKillProcess: _killProcess,
       ),
-      // Tab 3: User Profile & Preferences
+      // Tab 4: User Profile & Preferences
       ProfileView(tracks: _tracks),
     ];
 
@@ -391,20 +423,20 @@ class _MainScreenState extends State<MainScreen> {
                   GestureDetector(
                     onTap: () {
                       setState(() {
-                        _currentTabIndex = 3; // Switch to Profile tab
+                        _currentTabIndex = 4; // Switch to Profile tab
                       });
                     },
                     child: Container(
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: _currentTabIndex == 3 ? PulseColors.primaryMint : PulseColors.surfaceContainerHigh,
+                        color: _currentTabIndex == 4 ? PulseColors.primaryMint : PulseColors.surfaceContainerHigh,
                         shape: BoxShape.circle,
                         border: Border.all(color: PulseColors.primaryMint.withOpacity(0.4)),
                       ),
                       child: Icon(
                         Icons.person,
-                        color: _currentTabIndex == 3 ? PulseColors.onPrimary : PulseColors.primaryMint,
+                        color: _currentTabIndex == 4 ? PulseColors.onPrimary : PulseColors.primaryMint,
                         size: 18,
                       ),
                     ),
@@ -437,7 +469,7 @@ class _MainScreenState extends State<MainScreen> {
             setState(() {
               _currentTabIndex = idx;
             });
-            if (idx == 1) {
+            if (idx == 2) {
               _loadTracks();
             }
           },
@@ -450,6 +482,11 @@ class _MainScreenState extends State<MainScreen> {
           unselectedFontSize: 10,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
           items: [
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.auto_awesome),
+              activeIcon: Icon(Icons.auto_awesome, color: PulseColors.primaryMint),
+              label: 'For You',
+            ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.public),
               activeIcon: Icon(Icons.public, color: PulseColors.primaryMint),

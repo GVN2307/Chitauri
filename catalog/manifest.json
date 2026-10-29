@@ -1,0 +1,254 @@
+{
+  "version": "4.0.0",
+  "generated_at": "2026-10-29T16:31:39.667833+00:00",
+  "total_songs": 32614,
+  "languages": [
+    "telugu",
+    "tamil",
+    "malayalam",
+    "kannada",
+    "hindi"
+  ],
+  "shards": {
+    "telugu_1970s": {
+      "file": "telugu_1970s.json",
+      "language": "telugu",
+      "decade": "1970s",
+      "count": 1116,
+      "size_kb": 385.8,
+      "sha256_short": "99e01cc4a6d9"
+    },
+    "telugu_1980s": {
+      "file": "telugu_1980s.json",
+      "language": "telugu",
+      "decade": "1980s",
+      "count": 814,
+      "size_kb": 279.5,
+      "sha256_short": "c452180612de"
+    },
+    "telugu_1990s": {
+      "file": "telugu_1990s.json",
+      "language": "telugu",
+      "decade": "1990s",
+      "count": 583,
+      "size_kb": 197.1,
+      "sha256_short": "17350f091718"
+    },
+    "telugu_2000s": {
+      "file": "telugu_2000s.json",
+      "language": "telugu",
+      "decade": "2000s",
+      "count": 1127,
+      "size_kb": 371.2,
+      "sha256_short": "fb8cd98cc6f4"
+    },
+    "telugu_2010s": {
+      "file": "telugu_2010s.json",
+      "language": "telugu",
+      "decade": "2010s",
+      "count": 1491,
+      "size_kb": 496.4,
+      "sha256_short": "4cb5efc2edc4"
+    },
+    "telugu_2020s": {
+      "file": "telugu_2020s.json",
+      "language": "telugu",
+      "decade": "2020s",
+      "count": 985,
+      "size_kb": 332.2,
+      "sha256_short": "b111f2d0e551"
+    },
+    "tamil_1970s": {
+      "file": "tamil_1970s.json",
+      "language": "tamil",
+      "decade": "1970s",
+      "count": 1139,
+      "size_kb": 391.4,
+      "sha256_short": "96178ff1bc0a"
+    },
+    "tamil_1980s": {
+      "file": "tamil_1980s.json",
+      "language": "tamil",
+      "decade": "1980s",
+      "count": 695,
+      "size_kb": 236.4,
+      "sha256_short": "9295e83132e5"
+    },
+    "tamil_1990s": {
+      "file": "tamil_1990s.json",
+      "language": "tamil",
+      "decade": "1990s",
+      "count": 1180,
+      "size_kb": 387.2,
+      "sha256_short": "32603918f2db"
+    },
+    "tamil_2000s": {
+      "file": "tamil_2000s.json",
+      "language": "tamil",
+      "decade": "2000s",
+      "count": 1274,
+      "size_kb": 415.6,
+      "sha256_short": "b709821f774f"
+    },
+    "tamil_2010s": {
+      "file": "tamil_2010s.json",
+      "language": "tamil",
+      "decade": "2010s",
+      "count": 2205,
+      "size_kb": 733.3,
+      "sha256_short": "d069d62c1b93"
+    },
+    "tamil_2020s": {
+      "file": "tamil_2020s.json",
+      "language": "tamil",
+      "decade": "2020s",
+      "count": 623,
+      "size_kb": 206.0,
+      "sha256_short": "573427d249ff"
+    },
+    "malayalam_1970s": {
+      "file": "malayalam_1970s.json",
+      "language": "malayalam",
+      "decade": "1970s",
+      "count": 1338,
+      "size_kb": 454.2,
+      "sha256_short": "a94e193c0ef3"
+    },
+    "malayalam_1980s": {
+      "file": "malayalam_1980s.json",
+      "language": "malayalam",
+      "decade": "1980s",
+      "count": 1170,
+      "size_kb": 395.9,
+      "sha256_short": "db790401ca52"
+    },
+    "malayalam_1990s": {
+      "file": "malayalam_1990s.json",
+      "language": "malayalam",
+      "decade": "1990s",
+      "count": 905,
+      "size_kb": 307.9,
+      "sha256_short": "608694e58744"
+    },
+    "malayalam_2000s": {
+      "file": "malayalam_2000s.json",
+      "language": "malayalam",
+      "decade": "2000s",
+      "count": 770,
+      "size_kb": 260.4,
+      "sha256_short": "dc61c8cce354"
+    },
+    "malayalam_2010s": {
+      "file": "malayalam_2010s.json",
+      "language": "malayalam",
+      "decade": "2010s",
+      "count": 1390,
+      "size_kb": 472.1,
+      "sha256_short": "f448a4316422"
+    },
+    "malayalam_2020s": {
+      "file": "malayalam_2020s.json",
+      "language": "malayalam",
+      "decade": "2020s",
+      "count": 223,
+      "size_kb": 75.0,
+      "sha256_short": "2bcd0fd2bd9b"
+    },
+    "kannada_1970s": {
+      "file": "kannada_1970s.json",
+      "language": "kannada",
+      "decade": "1970s",
+      "count": 596,
+      "size_kb": 203.3,
+      "sha256_short": "132927b7d877"
+    },
+    "kannada_1980s": {
+      "file": "kannada_1980s.json",
+      "language": "kannada",
+      "decade": "1980s",
+      "count": 559,
+      "size_kb": 189.8,
+      "sha256_short": "4a5b150b0f3d"
+    },
+    "kannada_1990s": {
+      "file": "kannada_1990s.json",
+      "language": "kannada",
+      "decade": "1990s",
+      "count": 686,
+      "size_kb": 230.7,
+      "sha256_short": "e5b3d71084e4"
+    },
+    "kannada_2000s": {
+      "file": "kannada_2000s.json",
+      "language": "kannada",
+      "decade": "2000s",
+      "count": 1005,
+      "size_kb": 331.6,
+      "sha256_short": "fe66a06b1fa4"
+    },
+    "kannada_2010s": {
+      "file": "kannada_2010s.json",
+      "language": "kannada",
+      "decade": "2010s",
+      "count": 1654,
+      "size_kb": 547.9,
+      "sha256_short": "839de6e76fe5"
+    },
+    "kannada_2020s": {
+      "file": "kannada_2020s.json",
+      "language": "kannada",
+      "decade": "2020s",
+      "count": 153,
+      "size_kb": 51.4,
+      "sha256_short": "b6df1938e5cf"
+    },
+    "hindi_1970s": {
+      "file": "hindi_1970s.json",
+      "language": "hindi",
+      "decade": "1970s",
+      "count": 2131,
+      "size_kb": 709.4,
+      "sha256_short": "8dc7682c715a"
+    },
+    "hindi_1980s": {
+      "file": "hindi_1980s.json",
+      "language": "hindi",
+      "decade": "1980s",
+      "count": 1304,
+      "size_kb": 433.2,
+      "sha256_short": "38523fa720b5"
+    },
+    "hindi_1990s": {
+      "file": "hindi_1990s.json",
+      "language": "hindi",
+      "decade": "1990s",
+      "count": 1152,
+      "size_kb": 380.8,
+      "sha256_short": "15618340c4c6"
+    },
+    "hindi_2000s": {
+      "file": "hindi_2000s.json",
+      "language": "hindi",
+      "decade": "2000s",
+      "count": 1317,
+      "size_kb": 439.7,
+      "sha256_short": "a7813307b3a4"
+    },
+    "hindi_2010s": {
+      "file": "hindi_2010s.json",
+      "language": "hindi",
+      "decade": "2010s",
+      "count": 2057,
+      "size_kb": 687.5,
+      "sha256_short": "1eb03bbd469b"
+    },
+    "hindi_2020s": {
+      "file": "hindi_2020s.json",
+      "language": "hindi",
+      "decade": "2020s",
+      "count": 972,
+      "size_kb": 321.6,
+      "sha256_short": "5ebd6d3a8a4a"
+    }
+  }
+}

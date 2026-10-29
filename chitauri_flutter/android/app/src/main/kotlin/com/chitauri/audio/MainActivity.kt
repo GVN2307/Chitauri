@@ -223,14 +223,14 @@ class MainActivity: FlutterActivity() {
                                 }
                                 val request = YoutubeDLRequest(canonicalUrl).apply {
                                     addOption("--flat-playlist")
-                                    addOption("--yes-playlist")
+                                    addOption("--dump-single-json")
                                     addOption("-J")
                                     addOption("--no-check-certificates")
                                     addOption("--user-agent", userAgent)
                                     if (cookies.isNotEmpty()) {
                                         addOption("--add-header", "Cookie: $cookies")
                                     }
-                                    addOption("--extractor-args", "youtube:player_client=android,web,tv")
+                                    addOption("--extractor-args", "youtube:player_client=android,ios;player_skip=webpage,configs")
                                 }
                                 val response = YoutubeDL.getInstance().execute(request)
                                 val jsonOut = response.out
@@ -317,10 +317,31 @@ class MainActivity: FlutterActivity() {
                                     .replace(Regex("\\s+"), " ")
                                     .trim()
                                     .take(50)
-                                val safeBase = "${cleanTitle}_$videoId"
+
+                                val customOutputName = call.argument<String>("outputFileName")
+                                val safeBase = if (!customOutputName.isNullOrBlank()) {
+                                    customOutputName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+                                } else {
+                                    "${cleanTitle}_$videoId"
+                                }
                                 currentSafeBase = safeBase
 
-                                val convertToMp3 = call.argument<Boolean>("convertToMp3") ?: true
+                                val fastMode = call.argument<Boolean>("fastMode") ?: true
+                                val convertToMp3 = if (fastMode) false else (call.argument<Boolean>("convertToMp3") ?: false)
+
+                                var targetUrl = url
+                                val isYtSearch = targetUrl.startsWith("ytsearch1:") || targetUrl.startsWith("ytsearch3:") || targetUrl.startsWith("ytsearch:")
+                                if (isYtSearch) {
+                                    if (targetUrl.startsWith("ytsearch1:")) {
+                                        targetUrl = "ytsearch3:" + targetUrl.removePrefix("ytsearch1:")
+                                    } else if (targetUrl.startsWith("ytsearch:") && !targetUrl.startsWith("ytsearch3:")) {
+                                        targetUrl = "ytsearch3:" + targetUrl.removePrefix("ytsearch:")
+                                    }
+                                }
+
+                                val matchFilter = call.argument<String>("matchFilter")
+                                val audioQuality = call.argument<String>("audioQuality") ?: if (isYtSearch) "0" else "4"
+                                val embedMetadata = call.argument<Boolean>("embedMetadata") ?: isYtSearch
 
                                 // Purge any existing partial/staged files for this track
                                 try {
@@ -347,29 +368,47 @@ class MainActivity: FlutterActivity() {
                                 // Hold WakeLock and post ongoing Android Foreground Notification
                                 ChitauriDownloadService.notifyDownloadStarted(applicationContext, safeBase)
 
-                                val request = YoutubeDLRequest(url).apply {
+                                val request = YoutubeDLRequest(targetUrl).apply {
                                     addOption("--no-check-certificates")
                                     addOption("--force-overwrites")
                                     addOption("--no-continue")
                                     addOption("--no-part")
-                                    addOption("--retries", "3")
-                                    addOption("--fragment-retries", "3")
-                                    addOption("--user-agent", userAgent)
-                                    if (cookies.isNotEmpty()) {
-                                        addOption("--add-header", "Cookie: $cookies")
+                                    addOption("--retries", "10")
+                                    addOption("--fragment-retries", "10")
+                                    addOption("--concurrent-fragments", "4")
+                                    if (!isYtSearch) {
+                                        addOption("--user-agent", userAgent)
+                                        if (cookies.isNotEmpty()) {
+                                            addOption("--add-header", "Cookie: $cookies")
+                                        }
                                     }
-                                    addOption("--extractor-args", "youtube:player_client=android,web,tv")
+                                    addOption("--extractor-args", "youtube:player_client=android,ios;player_skip=webpage,configs")
+
+                                    if (isYtSearch) {
+                                        addOption("--max-downloads", "1")
+                                        addOption("--match-filter", matchFilter ?: "duration > 90 & duration < 540")
+                                    } else if (!matchFilter.isNullOrEmpty()) {
+                                        addOption("--match-filter", matchFilter)
+                                    }
+
+                                    if (embedMetadata) {
+                                        addOption("--add-metadata")
+                                        try {
+                                            addOption("--embed-thumbnail")
+                                        } catch (_: Exception) {}
+                                    }
+
                                     if (convertToMp3) {
-                                        // FFmpeg MP3 Extraction at optimal 160 kbps (~3.5MB per song, lightning fast transcode)
-                                        addOption("-f", "ba[ext=m4a]/ba[ext=webm]/ba/b")
+                                        addOption("-f", "ba[ext=m4a]/ba/b")
                                         addOption("-x")
                                         addOption("--audio-format", "mp3")
-                                        addOption("--audio-quality", "4")
+                                        addOption("--postprocessor-args", "ffmpeg:-threads 4 -b:a 128k -compression_level 9 -write_xing 1")
                                     } else {
-                                        // Pure direct AAC stream download (~3.2MB download)
-                                        addOption("-f", "140/ba/b")
+                                        addOption("-f", "140/ba[ext=m4a]/ba")
                                     }
-                                    addOption("--no-playlist")
+                                    if (!isYtSearch) {
+                                        addOption("--no-playlist")
+                                    }
                                     addOption("--no-mtime")
                                     addOption("--no-warnings")
                                     addOption("--socket-timeout", "30")
@@ -379,38 +418,50 @@ class MainActivity: FlutterActivity() {
                                 val mainHandler = Handler(Looper.getMainLooper())
                                 var lastProgressTime = 0L
 
-                                YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastProgressTime > 150 || progress >= 100f) {
-                                        lastProgressTime = now
+                                try {
+                                    YoutubeDL.getInstance().execute(request, processId) { progress, etaInSeconds, line ->
+                                        Log.d("ChitauriAudio", "yt-dlp line: $line (progress=$progress)")
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastProgressTime > 150 || progress >= 100f) {
+                                            lastProgressTime = now
 
-                                        // Only show percentage e.g. "45%" without long verbose process names
-                                        val normProgress = if (progress > 0) (progress / 100.0).coerceIn(0.05, 0.95) else 0.05
-                                        val pctInt = (normProgress * 100).toInt()
-                                        val pctText = "$pctInt%"
+                                            val normProgress = if (progress > 0) (progress / 100.0).coerceIn(0.05, 0.95) else 0.05
+                                            val pctInt = (normProgress * 100).toInt()
+                                            val pctText = "$pctInt%"
 
-                                        ChitauriDownloadService.notifyDownloadProgress(applicationContext, safeBase, pctInt)
+                                            ChitauriDownloadService.notifyDownloadProgress(applicationContext, safeBase, pctInt)
 
-                                        mainHandler.post {
-                                            ytDlpChannel?.invokeMethod("onProgress", mapOf(
-                                                "videoId" to videoId,
-                                                "progress" to normProgress,
-                                                "statusText" to pctText,
-                                                "eta" to etaInSeconds
-                                            ))
+                                            mainHandler.post {
+                                                ytDlpChannel?.invokeMethod("onProgress", mapOf(
+                                                    "videoId" to videoId,
+                                                    "progress" to normProgress,
+                                                    "statusText" to pctText,
+                                                    "eta" to etaInSeconds
+                                                ))
+                                            }
                                         }
+                                    }
+                                } catch (execEx: Exception) {
+                                    val msg = execEx.message ?: ""
+                                    if (msg.contains("101") || msg.contains("MaxDownloadsReached") || msg.contains("max-downloads")) {
+                                        Log.i("ChitauriAudio", "yt-dlp reached max-downloads (code 101), inspecting staging output...")
+                                    } else {
+                                        Log.w("ChitauriAudio", "yt-dlp execution exception: ${execEx.message}")
                                     }
                                 }
 
-                                // Locate completed file deterministically via processId prefix
+                                Log.d("ChitauriAudio", "yt-dlp execute complete for $processId. Inspecting stagingDir: ${stagingDir.listFiles()?.joinToString { "${it.name} (${it.length()})" }}")
+
+                                // Locate completed file deterministically via processId prefix (minimum 500 KB to avoid corrupted fragments)
+                                val minValidBytes = 500000L
                                 var resultFile: File? = File(stagingDir, "${processId}.mp3")
-                                if (resultFile?.exists() != true || resultFile.length() < 50000) {
+                                if (resultFile?.exists() != true || resultFile.length() < minValidBytes) {
                                     val m4aCandidate = File(stagingDir, "${processId}.m4a")
-                                    if (m4aCandidate.exists() && m4aCandidate.length() >= 50000) {
+                                    if (m4aCandidate.exists() && m4aCandidate.length() >= minValidBytes) {
                                         resultFile = m4aCandidate
                                     }
                                 }
-                                if (resultFile?.exists() != true || resultFile.length() < 50000) {
+                                if (resultFile?.exists() != true || resultFile.length() < minValidBytes) {
                                     val candidates = stagingDir.listFiles { _, name ->
                                         name.startsWith(processId) &&
                                         !name.endsWith(".part") &&
@@ -423,11 +474,11 @@ class MainActivity: FlutterActivity() {
                                             val audioBonus = if (file.name.endsWith(".mp3") || file.name.endsWith(".m4a")) 1000000000L else 0L
                                             audioBonus + file.length()
                                         }
-                                        resultFile = candidates.firstOrNull { it.length() >= 50000 }
+                                        resultFile = candidates.firstOrNull { it.length() >= minValidBytes }
                                     }
                                 }
 
-                                if (resultFile != null && resultFile.exists() && resultFile.length() >= 50000) {
+                                if (resultFile != null && resultFile.exists() && resultFile.length() >= minValidBytes) {
                                     val finalExt = resultFile.extension.ifEmpty { if (convertToMp3) "mp3" else "m4a" }
                                     val destFile = File(outDirFile, "${safeBase}.$finalExt")
 
@@ -443,6 +494,11 @@ class MainActivity: FlutterActivity() {
                                         }
                                         retriever.release()
                                     } catch (_: Exception) {}
+
+                                    // Validate duration > 0
+                                    if (trackDurationSecs <= 0 && resultFile.length() < 1000000L) {
+                                        throw IllegalStateException("Downloaded audio metadata invalid (duration=0)")
+                                    }
 
                                     mainHandler.post {
                                         ytDlpChannel?.invokeMethod("onProgress", mapOf(
@@ -467,7 +523,7 @@ class MainActivity: FlutterActivity() {
                                     }
                                 } else {
                                     mainHandler.post {
-                                        result.error("DOWNLOAD_FAILED", "Output file not found in staging", null)
+                                        result.error("DOWNLOAD_FAILED", "Output file not found in staging or smaller than 500 KB", null)
                                     }
                                 }
                             } catch (e: Exception) {

@@ -5,9 +5,47 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../models/telugu_song.dart';
 import '../models/track.dart';
 import 'audio_player_service.dart';
 import 'storage_service.dart';
+import 'taste_profiler.dart';
+
+class DownloadProgressEvent {
+  final String songId;
+  final String title;
+  final double progress;
+  final String statusText;
+  final bool isCompleted;
+  final bool isFailed;
+
+  const DownloadProgressEvent({
+    required this.songId,
+    required this.title,
+    required this.progress,
+    required this.statusText,
+    this.isCompleted = false,
+    this.isFailed = false,
+  });
+}
+
+class ResolvedYouTubeVideo {
+  final String videoId;
+  final String watchUrl;
+  final String title;
+  final String channel;
+  final int durationSecs;
+  final String thumbnailUrl;
+
+  const ResolvedYouTubeVideo({
+    required this.videoId,
+    required this.watchUrl,
+    required this.title,
+    required this.channel,
+    required this.durationSecs,
+    required this.thumbnailUrl,
+  });
+}
 
 class AuthenticatedYoutubeHttpClient extends YoutubeHttpClient {
   static const String modernUserAgent =
@@ -41,6 +79,7 @@ class YouTubeService {
       'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/UD1A.230803.041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
   String? _cachedCookies;
+  bool isFastMode = false;
 
   Future<String> getSessionCookies([String? videoId]) async {
     if (_cachedCookies != null && _cachedCookies!.isNotEmpty) {
@@ -89,9 +128,131 @@ class YouTubeService {
     final client = AuthenticatedYoutubeHttpClient(null, cookies);
     return YoutubeExplode(client);
   }
+
+  /// Fast (<400ms) InnerTube search pre-resolver in Dart.
+  /// Bypasses Python yt-dlp search scanning, extracts direct videoId & duration,
+  /// and guards against Shorts (<90s) and full movie jukeboxes (>540s).
+  Future<ResolvedYouTubeVideo?> preResolveYouTubeVideo(String rawQuery) async {
+    final query = rawQuery.replaceFirst(RegExp(r'^ytsearch\d*:'), '').trim();
+    if (query.isEmpty) return null;
+
+    // 1. Try lightweight InnerTube search API in pure Dart (<400ms)
+    try {
+      final uri = Uri.parse('https://www.youtube.com/youtubei/v1/search');
+      final payload = jsonEncode({
+        'context': {
+          'client': {
+            'clientName': 'WEB',
+            'clientVersion': '2.20240101.00.00',
+            'hl': 'en',
+            'gl': 'IN',
+          }
+        },
+        'query': query,
+      });
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': modernUserAgent,
+          'accept': '*/*',
+        },
+        body: payload,
+      ).timeout(const Duration(milliseconds: 3500));
+
+      if (resp.statusCode == 200 && resp.body.isNotEmpty) {
+        final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+        final contents = decoded['contents']?['twoColumnSearchResultsRenderer']?['primaryContents']?['sectionListRenderer']?['contents'];
+        if (contents is List) {
+          for (final section in contents) {
+            final itemSection = section['itemSectionRenderer']?['contents'];
+            if (itemSection is List) {
+              for (final item in itemSection) {
+                final vid = item['videoRenderer'];
+                if (vid is Map) {
+                  final vId = vid['videoId'] as String?;
+                  if (vId == null || vId.length != 11) continue;
+
+                  int durSecs = 215;
+                  final lenSimple = vid['lengthText']?['simpleText'] as String?;
+                  if (lenSimple != null) {
+                    final parts = lenSimple.split(':');
+                    if (parts.length == 2) {
+                      durSecs = (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+                    } else if (parts.length == 3) {
+                      durSecs = (int.tryParse(parts[0]) ?? 0) * 3600 + (int.tryParse(parts[1]) ?? 0) * 60 + (int.tryParse(parts[2]) ?? 0);
+                    }
+                  }
+
+                  // Filter out shorts (<90s) and full movie jukeboxes (>540s)
+                  if (durSecs > 0 && (durSecs < 90 || durSecs > 540)) {
+                    continue;
+                  }
+
+                  final titleRun = (vid['title']?['runs'] as List?)?.firstOrNull?['text'] as String? ?? query;
+                  final channelRun = (vid['ownerText']?['runs'] as List?)?.firstOrNull?['text'] as String? ?? 'Artist';
+                  final thumbUrl = 'https://i.ytimg.com/vi/$vId/hqdefault.jpg';
+
+                  return ResolvedYouTubeVideo(
+                    videoId: vId,
+                    watchUrl: 'https://www.youtube.com/watch?v=$vId',
+                    title: titleRun,
+                    channel: channelRun,
+                    durationSecs: durSecs,
+                    thumbnailUrl: thumbUrl,
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('InnerTube pre-resolve exception: $e');
+    }
+
+    // 2. YoutubeExplode search fallback
+    try {
+      final ytClient = await getAuthenticatedYt();
+      try {
+        final searchBatch = await ytClient.search.search(query).timeout(const Duration(seconds: 4));
+        for (final v in searchBatch) {
+          final dur = v.duration?.inSeconds ?? 215;
+          if (dur > 0 && (dur < 90 || dur > 540)) {
+            continue;
+          }
+          return ResolvedYouTubeVideo(
+            videoId: v.id.value,
+            watchUrl: 'https://www.youtube.com/watch?v=${v.id.value}',
+            title: v.title,
+            channel: v.author,
+            durationSecs: dur,
+            thumbnailUrl: 'https://i.ytimg.com/vi/${v.id.value}/hqdefault.jpg',
+          );
+        }
+      } finally {
+        ytClient.close();
+      }
+    } catch (_) {}
+
+    return null;
+  }
   
   void Function(double progress, String statusText)? _activeNativeProgressCallback;
   String? _activeNativeVideoId;
+
+  final StreamController<DownloadProgressEvent> _downloadProgressController =
+      StreamController<DownloadProgressEvent>.broadcast();
+  Stream<DownloadProgressEvent> get downloadProgressStream => _downloadProgressController.stream;
+
+  DownloadProgressEvent? _activeDownloadEvent;
+  DownloadProgressEvent? get activeDownloadEvent => _activeDownloadEvent;
+
+  void _emitDownloadProgress(DownloadProgressEvent event) {
+    _activeDownloadEvent = event;
+    _downloadProgressController.add(event);
+  }
 
   YouTubeService._internal() {
     if (Platform.isAndroid) {
@@ -179,38 +340,8 @@ class YouTubeService {
         }).timeout(const Duration(seconds: 45));
 
         if (jsonStr != null && jsonStr.isNotEmpty) {
-          final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-          final entries = data['entries'] as List<dynamic>?;
-          if (entries != null && entries.isNotEmpty) {
-            final items = <YouTubeVideoItem>[];
-            for (final e in entries) {
-              if (e is Map) {
-                final vId = (e['id'] as String?)?.trim() ?? '';
-                final title = (e['title'] as String?)?.trim() ?? '';
-                final uploader = (e['uploader'] as String?)?.trim() ??
-                    (e['channel'] as String?)?.trim() ??
-                    'Music Artist';
-                final durSecs = (e['duration'] as num?)?.toInt() ?? 215;
-                final durStr =
-                    '${durSecs ~/ 60}:${(durSecs % 60).toString().padLeft(2, '0')}';
-                if (vId.isNotEmpty &&
-                    vId != '[Private video]' &&
-                    vId != '[Deleted video]') {
-                  items.add(YouTubeVideoItem(
-                    id: vId,
-                    title: _cleanSongTitle(title),
-                    channel: uploader,
-                    duration: durStr,
-                    views: 'Playlist',
-                    thumbnailUrl:
-                        'https://img.youtube.com/vi/$vId/hqdefault.jpg',
-                    url: 'https://www.youtube.com/watch?v=$vId',
-                  ));
-                }
-              }
-            }
-            if (items.isNotEmpty) return items;
-          }
+          final items = parsePlaylistJson(jsonStr);
+          if (items.isNotEmpty) return items;
         }
       } catch (e) {
         debugPrint('Native playlist extraction error: $e');
@@ -223,6 +354,10 @@ class YouTubeService {
       try {
         final items = <YouTubeVideoItem>[];
         await for (final v in yt.playlists.getVideos(playlistId).take(100)) {
+          final dur = v.duration?.inSeconds ?? 215;
+          if (dur > 0 && (dur < 90 || dur > 540)) {
+            continue;
+          }
           items.add(YouTubeVideoItem(
             id: v.id.value,
             title: _cleanSongTitle(v.title),
@@ -244,6 +379,69 @@ class YouTubeService {
     }
 
     return [];
+  }
+
+  /// Parses yt-dlp `--flat-playlist --dump-single-json` output with Safeguard 2 duration filtering.
+  List<YouTubeVideoItem> parsePlaylistJson(String jsonStr) {
+    try {
+      final decoded = jsonDecode(jsonStr);
+      final List rawEntries;
+      if (decoded is List) {
+        rawEntries = decoded;
+      } else if (decoded is Map<String, dynamic> && decoded['entries'] is List) {
+        rawEntries = decoded['entries'] as List;
+      } else if (decoded is Map<String, dynamic> && decoded['items'] is List) {
+        rawEntries = decoded['items'] as List;
+      } else {
+        return [];
+      }
+
+      final items = <YouTubeVideoItem>[];
+      for (final raw in rawEntries) {
+        if (raw is! Map) continue;
+        final e = raw as Map<String, dynamic>;
+        final id = (e['id'] as String?) ?? extractVideoId(e['url'] as String? ?? '') ?? '';
+        if (id.isEmpty) continue;
+
+        final rawDuration = (e['duration'] as num?)?.toInt();
+        // Safeguard 2: Filter out shorts (<90s) and multi-hour mixes/jukeboxes (>540s),
+        // but preserve nullable duration (duration: null or <= 0) to avoid false drops.
+        if (rawDuration != null && rawDuration > 0 && (rawDuration < 90 || rawDuration > 540)) {
+          continue;
+        }
+        final durSecs = (rawDuration != null && rawDuration > 0) ? rawDuration : 215;
+        final minutes = durSecs ~/ 60;
+        final seconds = durSecs % 60;
+        final durFormatted = '$minutes:${seconds.toString().padLeft(2, '0')}';
+
+        final rawTitle = (e['title'] as String?) ?? 'Song';
+        final channel = (e['uploader'] as String?) ?? (e['channel'] as String?) ?? (e['artist'] as String?) ?? 'Music Artist';
+
+        String? thumb = e['thumbnail'] as String?;
+        if (thumb == null && e['thumbnails'] is List && (e['thumbnails'] as List).isNotEmpty) {
+          final thumbs = e['thumbnails'] as List;
+          final last = thumbs.last;
+          if (last is Map && last['url'] is String) {
+            thumb = last['url'] as String;
+          }
+        }
+        thumb ??= 'https://img.youtube.com/vi/$id/hqdefault.jpg';
+
+        items.add(YouTubeVideoItem(
+          id: id,
+          title: _cleanSongTitle(rawTitle),
+          channel: channel,
+          duration: durFormatted,
+          views: 'Playlist',
+          thumbnailUrl: thumb,
+          url: 'https://www.youtube.com/watch?v=$id',
+        ));
+      }
+      return items;
+    } catch (e) {
+      debugPrint('Error parsing playlist JSON: $e');
+      return [];
+    }
   }
 
   Future<Map<String, String>> fetchVideoMetadata(String videoId) async {
@@ -710,7 +908,7 @@ class YouTubeService {
             const Duration(seconds: 20),
           );
         }
-        if (manifest != null && manifest.audioOnly.isNotEmpty) {
+        if (manifest.audioOnly.isNotEmpty) {
           final audioStreams = manifest.audioOnly;
           final streamInfo = audioStreams.firstWhere(
             (s) => s.tag == 140, // 128kbps AAC (~3.2MB)
@@ -794,7 +992,7 @@ class YouTubeService {
             const Duration(seconds: 20),
           );
         }
-        if (manifest2 == null || manifest2.audioOnly.isEmpty) {
+        if (manifest2.audioOnly.isEmpty) {
           throw Exception('No audio streams in manifest 2');
         }
         final audioStreams2 = manifest2.audioOnly;
@@ -879,7 +1077,8 @@ class YouTubeService {
             'title': fileBaseName,
             'url': 'https://www.youtube.com/watch?v=$rawVideoId',
             'outputDir': musicDir.path,
-            'convertToMp3': true,
+            'convertToMp3': !isFastMode,
+            'fastMode': isFastMode,
           }).timeout(const Duration(seconds: 180));
 
           if (res3 != null && res3['success'] == true) {
@@ -901,6 +1100,184 @@ class YouTubeService {
 
       throw Exception('Download failed across all methods for "$title". Please check network connection.');
     } finally {
+      if (Platform.isAndroid) {
+        try {
+          await _nativeYtDlp.invokeMethod('stopDownloadService');
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// One-Tap ytsearch1: background MP3 extraction hook for Telugu catalog recommendations
+  Future<Track> downloadTeluguRecommendation(
+    TeluguSong song, {
+    void Function(double progress, String statusText)? onProgress,
+  }) async {
+    final storage = StorageService.instance;
+    final musicDir = await storage.getMusicDir();
+    final procId = '${song.id}_${DateTime.now().millisecondsSinceEpoch}';
+
+    void reportProgress(double p, String txt) {
+      onProgress?.call(p, txt);
+      _emitDownloadProgress(DownloadProgressEvent(
+        songId: song.id,
+        title: '${song.title} - ${song.movie}',
+        progress: p,
+        statusText: txt,
+      ));
+      if (Platform.isAndroid) {
+        try {
+          _nativeYtDlp.invokeMethod('updateDownloadProgress', {
+            'title': '${song.title} (${song.movie})',
+            'progress': (p * 100).toInt(),
+          });
+        } catch (_) {}
+      }
+    }
+
+    reportProgress(0.05, 'Starting...');
+
+    if (Platform.isAndroid) {
+      try {
+        await _nativeYtDlp.invokeMethod('startDownloadService', {
+          'title': '${song.title} (${song.movie})',
+        });
+      } catch (_) {}
+    }
+
+    try {
+      if (Platform.isAndroid) {
+        try {
+          _activeNativeVideoId = song.id;
+          _activeNativeProgressCallback = reportProgress;
+
+          reportProgress(0.08, 'Pre-resolving YouTube stream...');
+          final resolved = await preResolveYouTubeVideo(song.searchQuery);
+          final targetUrl = resolved?.watchUrl ?? (song.id.length == 11 ? 'https://www.youtube.com/watch?v=${song.id}' : song.searchQuery);
+          final targetVideoId = resolved?.videoId ?? song.id;
+          final resolvedThumb = resolved?.thumbnailUrl ?? song.bannerUrl ?? 'https://i.ytimg.com/vi/$targetVideoId/hqdefault.jpg';
+
+          reportProgress(0.15, 'Starting native audio stream...');
+
+          final res = await _nativeYtDlp.invokeMapMethod<String, dynamic>('downloadMp3', {
+            'processId': procId,
+            'videoId': targetVideoId,
+            'title': song.cleanTitle,
+            'outputFileName': song.outputFileName,
+            'url': targetUrl,
+            'outputDir': musicDir.path,
+            'convertToMp3': false,
+            'fastMode': true,
+            'matchFilter': 'duration > 90 & duration < 540',
+            'embedMetadata': true,
+          }).timeout(const Duration(seconds: 180));
+
+          if (res != null && res['success'] == true) {
+            final filePath = res['filePath'] as String;
+            final nativeDur = (res['durationSecs'] as num?)?.toInt() ?? (resolved?.durationSecs ?? 240);
+            final file = File(filePath);
+
+            reportProgress(0.95, 'Saving cover & metadata...');
+
+            final localCover = await storage.cacheCoverImageLocally(song.id, resolvedThumb);
+            await storage.saveLibraryMetadataEntry(song.id, {
+              'id': song.id,
+              'title': song.title,
+              'movie': song.movie,
+              'composer': song.composer,
+              'singers': song.singers,
+              'year': song.year,
+              'decade': song.decade,
+              'mood': song.mood,
+              'language': song.language,
+              'bannerUrl': resolvedThumb,
+              'localCoverPath': localCover,
+            });
+
+            reportProgress(0.98, '98%');
+
+            final track = Track(
+              id: song.id,
+              title: song.title,
+              artist: song.subtitle,
+              filePath: file.path,
+              durationSecs: nativeDur > 0 ? nativeDur : 240,
+              fileSize: await file.exists() ? await file.length() : 0,
+              thumbnailUrl: localCover ?? resolvedThumb,
+              description: '${song.movie} (${song.year}) • Composer: ${song.composer} • Mood: ${song.mood}',
+            );
+
+            await storage.addTrack(track);
+            await TasteProfiler.instance.recordDownload(song);
+
+            reportProgress(1.0, '100%');
+            _emitDownloadProgress(DownloadProgressEvent(
+              songId: song.id,
+              title: '${song.title} - ${song.movie}',
+              progress: 1.0,
+              statusText: 'Saved',
+              isCompleted: true,
+            ));
+
+            return track;
+          }
+        } catch (nativeErr) {
+          debugPrint('Native yt-dlp error: $nativeErr -> Falling back to pure audio stream pipeline');
+        }
+      }
+
+      // Cross-platform fallback: search query via YoutubeExplode and download audio
+      reportProgress(0.15, 'Searching track...');
+      final searchResults = await search('${song.title} ${song.movie} ${song.composer} Telugu official audio song');
+      if (searchResults.isNotEmpty) {
+        // Apply duration filter guardrail: between 120s (2m) and 480s (8m)
+        YouTubeVideoItem? selectedVid;
+        for (final vid in searchResults) {
+          final parts = vid.duration.split(':');
+          int secs = 0;
+          if (parts.length == 2) {
+            secs = (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+          } else if (parts.length == 3) {
+            secs = (int.tryParse(parts[0]) ?? 0) * 3600 + (int.tryParse(parts[1]) ?? 0) * 60 + (int.tryParse(parts[2]) ?? 0);
+          }
+          if (secs >= 120 && secs <= 480) {
+            selectedVid = vid;
+            break;
+          }
+        }
+        selectedVid ??= searchResults.first;
+
+        final track = await downloadAudio(
+          selectedVid.id,
+          title: song.title,
+          channel: song.subtitle,
+          onProgress: reportProgress,
+        );
+
+        await TasteProfiler.instance.recordDownload(song);
+        _emitDownloadProgress(DownloadProgressEvent(
+          songId: song.id,
+          title: '${song.title} - ${song.movie}',
+          progress: 1.0,
+          statusText: 'Saved',
+          isCompleted: true,
+        ));
+        return track;
+      }
+
+      throw Exception('Could not find matching audio for "${song.title} - ${song.movie}"');
+    } catch (e) {
+      _emitDownloadProgress(DownloadProgressEvent(
+        songId: song.id,
+        title: '${song.title} - ${song.movie}',
+        progress: 0.0,
+        statusText: 'Failed',
+        isFailed: true,
+      ));
+      rethrow;
+    } finally {
+      _activeNativeVideoId = null;
+      _activeNativeProgressCallback = null;
       if (Platform.isAndroid) {
         try {
           await _nativeYtDlp.invokeMethod('stopDownloadService');

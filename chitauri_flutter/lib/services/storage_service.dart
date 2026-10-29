@@ -64,6 +64,62 @@ class StorageService {
     return File('${dir.path}/tracks_catalog.json');
   }
 
+  Future<Directory> getCoversDir() async {
+    final musicDir = await getMusicDir();
+    final coversDir = Directory('${musicDir.path}/.covers');
+    if (!await coversDir.exists()) {
+      await coversDir.create(recursive: true);
+    }
+    return coversDir;
+  }
+
+  Future<File> getLibraryMetadataFile() async {
+    final musicDir = await getMusicDir();
+    return File('${musicDir.path}/library_metadata.json');
+  }
+
+  Future<Map<String, dynamic>> loadLibraryMetadata() async {
+    try {
+      final file = await getLibraryMetadataFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.trim().isNotEmpty) {
+          return jsonDecode(content) as Map<String, dynamic>;
+        }
+      }
+    } catch (e) {
+      // Return empty map on error
+    }
+    return {};
+  }
+
+  Future<void> saveLibraryMetadataEntry(String trackId, Map<String, dynamic> metadata) async {
+    try {
+      final file = await getLibraryMetadataFile();
+      final allMeta = await loadLibraryMetadata();
+      allMeta[trackId] = metadata;
+      await file.writeAsString(jsonEncode(allMeta), flush: true);
+    } catch (_) {}
+  }
+
+  Future<String?> cacheCoverImageLocally(String id, String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+    try {
+      final coversDir = await getCoversDir();
+      final safeId = id.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final targetFile = File('${coversDir.path}/$safeId.jpg');
+      if (await targetFile.exists() && await targetFile.length() > 500) {
+        return targetFile.path;
+      }
+      final res = await http.get(Uri.parse(imageUrl)).timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200 && res.bodyBytes.length > 500) {
+        await targetFile.writeAsBytes(res.bodyBytes, flush: true);
+        return targetFile.path;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   String getTrackCanonicalKey(Track track) {
     // 1. Detect if intentional user copy e.g. "(2)", "(3)"
     final copyMatch = RegExp(r'\s*\((\d+)\)$').firstMatch(track.title);
@@ -109,6 +165,16 @@ class StorageService {
   }
 
   Future<String?> resolveThumbnailPath(Directory dir, String id, String? candidateThumb, [String? filePath]) async {
+    // 0. Check local .covers cache
+    final coversDir = Directory('${dir.path}/.covers');
+    if (await coversDir.exists()) {
+      final safeId = id.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final cFile = File('${coversDir.path}/$safeId.jpg');
+      if (await cFile.exists() && await cFile.length() > 500) {
+        return cFile.path;
+      }
+    }
+
     final thumbsDir = Directory('${dir.path}/thumbnails');
     if (!await thumbsDir.exists()) return candidateThumb;
 
